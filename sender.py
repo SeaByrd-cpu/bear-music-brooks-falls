@@ -4,8 +4,32 @@ import subprocess
 import json
 import requests
 import sys
+import signal
 
 RENDER_INGEST_URL = "https://music-of-the-bears.onrender.com/ingest"
+
+detector = None
+running = True
+
+
+def stop_cleanly(*args):
+    global running
+
+    running = False
+    print("\n🐻 Sender stopping...")
+
+    if detector:
+        try:
+            detector.terminate()
+        except Exception:
+            pass
+
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, stop_cleanly)
+signal.signal(signal.SIGTERM, stop_cleanly)
+
 
 detector = subprocess.Popen(
     ["python3", "detector.py"],
@@ -17,23 +41,42 @@ detector = subprocess.Popen(
 print("🐻 Sender running...")
 print(f"Sending bear JSON to: {RENDER_INGEST_URL}")
 
-for line in detector.stdout:
-    line = line.strip()
+try:
+    for line in detector.stdout:
+        if not running:
+            break
 
-    if not line.startswith("{"):
-        continue
+        line = line.strip()
 
-    try:
-        payload = json.loads(line)
+        if not line.startswith("{"):
+            continue
 
-        r = requests.post(
-            RENDER_INGEST_URL,
-            json=payload,
-            timeout=5
-        )
+        try:
+            payload = json.loads(line)
 
-        if r.status_code != 200:
-            print("Upload failed:", r.status_code, r.text)
+            r = requests.post(
+                RENDER_INGEST_URL,
+                json=payload,
+                timeout=1
+            )
 
-    except Exception as e:
-        print("Sender error:", e)
+            if r.status_code != 200:
+                print("Upload failed:", r.status_code, r.text)
+
+        except requests.exceptions.RequestException as e:
+            print("Upload error:", e)
+
+        except json.JSONDecodeError:
+            print("Bad JSON:", line)
+
+except KeyboardInterrupt:
+    stop_cleanly()
+
+finally:
+    if detector:
+        try:
+            detector.terminate()
+        except Exception:
+            pass
+
+    print("🐻 Sender stopped.")
