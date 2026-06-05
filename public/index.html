@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Brooks Falls — Bear Motion Music</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&family=Lato:wght@300;400&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --river: #1a3a4a;
+  --foam: #a8c8d8;
+  --salmon: #e87040;
+  --moss: #4a7a50;
+  --dark: #0a1a20;
+  --text: #d0e8f0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--dark);
+  color: var(--text);
+  font-family: 'Lato', sans-serif;
+}
+
+#stream-frame {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  z-index: 1;
+  pointer-events: none;
+}
+
+#vis-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.38;
+  mix-blend-mode: screen;
+}
+
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 24px 32px 0;
+  pointer-events: none;
+}
+
+#title-block h1 {
+  font-family: 'Manrope', sans-serif;
+  font-size: clamp(1rem, 2.5vw, 1.5rem);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--foam);
+  text-shadow: 0 0 24px rgba(168,200,216,0.4);
+}
+
+#title-block p {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  font-weight: 300;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(168,200,216,0.5);
+}
+
+#status-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: rgba(10,26,32,0.65);
+  border: 1px solid rgba(168,200,216,0.15);
+  backdrop-filter: blur(6px);
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #666;
+}
+
+.dot.live {
+  background: var(--salmon);
+  box-shadow: 0 0 8px var(--salmon);
+}
+
+.dot.ready {
+  background: var(--moss);
+  box-shadow: 0 0 8px var(--moss);
+}
+
+.dot.error {
+  background: #c0392b;
+}
+
+#start-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background:
+    linear-gradient(
+      to bottom,
+      rgba(10,26,32,0.18),
+      rgba(10,26,32,0.45)
+    );
+  backdrop-filter: blur(2px);
+  transition: opacity 0.6s;
+}
+
+#start-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bear-icon {
+  font-size: 4rem;
+  filter: drop-shadow(0 0 18px rgba(232,112,64,0.6));
+}
+
+#start-overlay h2 {
+  font-family: 'Manrope', sans-serif;
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: var(--foam);
+}
+
+#begin-audio {
+  border: 1px solid rgba(168,200,216,0.4);
+  background: rgba(10,26,32,0.45);
+  color: var(--foam);
+  padding: 14px 24px;
+  border-radius: 999px;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    background 0.25s,
+    transform 0.2s,
+    border-color 0.25s;
+}
+
+#begin-audio:hover {
+  background: rgba(168,200,216,0.12);
+  border-color: rgba(168,200,216,0.7);
+  transform: scale(1.03);
+}
+</style>
+</head>
+
+<body>
+
+<iframe
+  id="stream-frame"
+  src="https://www.youtube.com/embed/53vUbxn5wl8?autoplay=1&mute=1&controls=0&modestbranding=1"
+  allow="autoplay; encrypted-media"
+  allowfullscreen>
+</iframe>
+
+<canvas id="vis-canvas"></canvas>
+
+<div id="hud">
+  <div id="title-block">
+    <h1>Music of the Bears</h1>
+  </div>
+
+  <div id="status-block">
+    <div class="status-pill">
+      <span class="dot" id="dot-ws"></span>
+      <span id="label-ws">Connecting…</span>
+    </div>
+
+    <div class="status-pill">
+      <span class="dot" id="dot-audio"></span>
+      <span id="label-audio">Audio standby</span>
+    </div>
+  </div>
+</div>
+
+<div id="start-overlay">
+  <div class="bear-icon">🐻</div>
+  <h2>Listen to the Bears</h2>
+  <button id="begin-audio">Begin Listening</button>
+</div>
+
+<script>
+const WS_URL =
+  `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
+
+const SCALE_HZ = [
+  130.81, 146.83, 164.81, 196.00, 220.00,
+  261.63, 293.66, 329.63, 392.00, 440.00
+];
+
+let audioCtx;
+let started = false;
+let socket;
+
+let drone;
+let droneDetune;
+let pad;
+let reverb;
+let masterGain;
+let padFilter;
+let padGain;
+let droneGain;
+
+let sceneMuted = false;
+
+let smoothMain = {
+  x: 0.5,
+  y: 0.5,
+  area: 0.1
+};
+
+const visualBlobs = [];
+
+const bearVoices = {};
+
+const VOICE_TYPES = [
+  "low",
+  "pad",
+  "bell",
+  "pulse"
+];
+
+let lastPluckTime = 0;
+
+// ── Canvas ─────────────────────────────────────────────
+
+const canvas = document.getElementById("vis-canvas");
+const ctx = canvas.getContext("2d");
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = visualBlobs.length - 1; i >= 0; i--) {
+    const b = visualBlobs[i];
+
+    b.x += b.vx;
+    b.y += b.vy;
+    b.life -= 0.01;
+
+    if (b.life <= 0) {
+      visualBlobs.splice(i, 1);
+      continue;
+    }
+
+    const x = b.x * canvas.width;
+    const y = b.y * canvas.height;
+    const radius = 45 + b.area * 260;
+    const alpha = b.life * 0.2;
+
+    const grad = ctx.createRadialGradient(
+      x, y, 0,
+      x, y, radius
+    );
+
+    if (b.state === "mass") {
+      grad.addColorStop(0, `rgba(90,130,160,${alpha})`);
+      grad.addColorStop(0.5, `rgba(40,80,110,${alpha * 0.55})`);
+      grad.addColorStop(1, "rgba(10,26,32,0)");
+    } else {
+      grad.addColorStop(0, `rgba(232,112,64,${alpha})`);
+      grad.addColorStop(0.45, `rgba(168,200,216,${alpha * 0.55})`);
+      grad.addColorStop(1, "rgba(26,58,74,0)");
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, radius * b.life, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+
+// ── Audio ─────────────────────────────────────────────
+
+async function buildAudioGraph() {
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.7;
+  masterGain.connect(audioCtx.destination);
+
+  reverb = audioCtx.createConvolver();
+  reverb.buffer = buildReverb(audioCtx, 3.5, 2.0);
+  reverb.connect(masterGain);
+
+  drone = audioCtx.createOscillator();
+  drone.type = "sine";
+  drone.frequency.value = 55;
+
+  droneDetune = audioCtx.createOscillator();
+  droneDetune.type = "sine";
+  droneDetune.frequency.value = 55.3;
+
+  droneGain = audioCtx.createGain();
+  droneGain.gain.value = 0.14;
+
+  drone.connect(droneGain);
+  droneDetune.connect(droneGain);
+  droneGain.connect(reverb);
+
+  drone.start();
+  droneDetune.start();
+
+  pad = audioCtx.createOscillator();
+  pad.type = "triangle";
+  pad.frequency.value = 110;
+
+  padFilter = audioCtx.createBiquadFilter();
+  padFilter.type = "lowpass";
+  padFilter.frequency.value = 500;
+  padFilter.Q.value = 0.5;
+
+  padGain = audioCtx.createGain();
+  padGain.gain.value = 0.04;
+
+  pad.connect(padFilter);
+  padFilter.connect(padGain);
+  padGain.connect(reverb);
+
+  pad.start();
+}
+
+function createBearVoice(id) {
+
+  const osc = audioCtx.createOscillator();
+  osc.type = "sine";
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 1200;
+
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0;
+
+  const panner = audioCtx.createStereoPanner();
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(panner);
+  panner.connect(reverb);
+
+  osc.start();
+
+  // entrance shimmer
+  pluckNote(
+    330 + (id % 5) * 60,
+    0.06
+  );
+
+  const type =
+  VOICE_TYPES[id % VOICE_TYPES.length];
+
+  bearVoices[id] = {
+    osc,
+    filter,
+    gain,
+    panner,
+    type,
+    lastSeen: performance.now()
+  };
+
+  return bearVoices[id];
+}
+
+function buildReverb(ctx, duration, decay) {
+  const rate = ctx.sampleRate;
+  const len = Math.floor(rate * duration);
+  const buf = ctx.createBuffer(2, len, rate);
+
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+
+    for (let i = 0; i < len; i++) {
+      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+  }
+
+  return buf;
+}
+
+// ── Bear Data → Music ─────────────────────────────────
+
+function onBearData(bears) {
+  if (!audioCtx || sceneMuted) return;
+
+  const t = audioCtx.currentTime;
+
+  if (!bears || bears.length === 0) {
+    padGain.gain.linearRampToValueAtTime(0.015, t + 1.0);
+    droneGain.gain.linearRampToValueAtTime(0.08, t + 1.5);
+    return;
+  }
+
+  const mainBear = bears[0];
+
+  smoothMain.x = smoothMain.x * 0.88 + mainBear.x * 0.12;
+  smoothMain.y = smoothMain.y * 0.88 + mainBear.y * 0.12;
+  smoothMain.area = smoothMain.area * 0.88 + mainBear.area * 0.12;
+
+  const x = smoothMain.x;
+  const y = smoothMain.y;
+  const area = smoothMain.area;
+
+  const idx = Math.floor(x * (SCALE_HZ.length - 1));
+  const freq = SCALE_HZ[idx];
+
+  const filterFreq = 200 + ((1 - y) * 2200);
+  const volume = 0.02 + area * 0.18;
+
+  const massCount = bears.filter(b => b.state === "mass").length;
+  const bearCount = bears.filter(b => b.state === "bear").length;
+
+  if (mainBear.state === "mass") {
+    drone.frequency.linearRampToValueAtTime(55, t + 1.5);
+    droneDetune.frequency.linearRampToValueAtTime(55.3, t + 1.5);
+    droneGain.gain.linearRampToValueAtTime(0.16 + massCount * 0.03, t + 1.0);
+    padGain.gain.linearRampToValueAtTime(0.025, t + 1.0);
+  } else {
+    pad.frequency.linearRampToValueAtTime(freq, t + 0.25);
+    padFilter.frequency.linearRampToValueAtTime(filterFreq, t + 0.2);
+    padGain.gain.linearRampToValueAtTime(volume + bearCount * 0.015, t + 0.2);
+
+    drone.frequency.linearRampToValueAtTime(freq / 2, t + 1.2);
+    droneDetune.frequency.linearRampToValueAtTime((freq / 2) + 0.3, t + 1.2);
+    droneGain.gain.linearRampToValueAtTime(0.12 + area * 0.08, t + 1.0);
+  }
+
+  for (const bear of bears) {
+
+  let voice = bearVoices[bear.id];
+
+  if (!voice) {
+    voice = createBearVoice(bear.id);
+  }
+
+  voice.lastSeen = performance.now();
+
+  const t = audioCtx.currentTime;
+
+  const noteIndex = Math.floor(
+    (1 - bear.y) * (SCALE_HZ.length - 1)
+  );
+
+  let freq = SCALE_HZ[noteIndex];
+
+  const type = voice.type;
+
+  const pan = (bear.x * 2 - 1) * 0.75;
+
+  voice.panner.pan.linearRampToValueAtTime(
+    pan,
+    t + 0.4
+  );
+
+  // different behaviors affect pitch region
+  if (type === "low") {
+
+    voice.osc.type = "sine";
+    freq *= 0.25;
+
+  }
+
+  else if (type === "pad") {
+
+    voice.osc.type = "triangle";
+    freq *= 0.5;
+
+  }
+
+  else if (type === "bell") {
+
+    voice.osc.type = "sine";
+    freq *= 2.0;
+
+  }
+
+  else if (type === "pulse") {
+
+    voice.osc.type = "square";
+    freq *= 1.0;
+  }
+
+  voice.osc.frequency.linearRampToValueAtTime(
+    freq,
+    t + 0.3
+  );
+
+  voice.filter.frequency.linearRampToValueAtTime(
+    300 + ((1 - bear.y) * 2600),
+    t + 0.3
+  );
+
+  let targetGain = 0.01 + bear.area * 0.04;
+
+  if (type === "low") {
+    targetGain *= 1.8;
+  }
+
+  if (type === "bell") {
+    targetGain *= 0.5;
+  }
+
+  if (type === "pulse") {
+    targetGain *= 0.8;
+  }
+
+  if (bear.state === "mass") {
+    targetGain *= 0.6;
+  }
+
+  if (bear.behavior === "active") {
+    targetGain *= 1.8;
+  }
+
+  voice.gain.gain.linearRampToValueAtTime(
+    targetGain,
+    t + 0.4
+  );
+
+  // movement-triggered plucks
+  if (
+    bear.behavior === "active"
+    && bear.speed > 0.015
+  ) {
+    pluckNote(
+      freq,
+      Math.min(1, bear.speed * 15)
+    );
+  }
+
+  // bell shimmer layer
+  if (
+    type === "bell"
+    && bear.speed > 0.01
+  ) {
+
+    pluckNote(
+      freq * 2,
+      0.15
+    );
+  }
+
+  visualBlobs.push({
+    x: bear.x,
+    y: bear.y,
+    area: bear.area,
+    state: bear.state,
+    life: 1,
+    vx: (Math.random() - 0.5) * 0.0015,
+    vy: (Math.random() - 0.5) * 0.0015
+  });
+}
+
+  while (visualBlobs.length > 120) {
+    visualBlobs.shift();
+  }
+
+  const nowPerf = performance.now();
+
+  for (const id in bearVoices) {
+    const voice = bearVoices[id];
+    const idle = nowPerf - voice.lastSeen;
+
+    if (idle > 8000) {
+      voice.gain.gain.linearRampToValueAtTime(
+        0.0,
+        audioCtx.currentTime + 2.0
+      );
+    }
+  }
+}
+
+function pluckNote(freq, velocity) {
+  if (!audioCtx) return;
+
+  const now = audioCtx.currentTime;
+
+  if (now - lastPluckTime < 0.22) return;
+
+  lastPluckTime = now;
+
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+
+  osc.type = "sine";
+  osc.frequency.value = freq;
+
+  filter.type = "lowpass";
+  filter.frequency.value = 1800;
+
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(velocity * 0.12, now + 0.01);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+
+  osc.connect(filter);
+  filter.connect(env);
+  env.connect(masterGain);
+
+  osc.start(now);
+  osc.stop(now + 2);
+}
+
+function movementPluck(freq, velocity, x) {
+  if (!audioCtx) return;
+
+  const now = audioCtx.currentTime;
+
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  const panner = audioCtx.createStereoPanner();
+
+  osc.type = "triangle";
+  osc.frequency.value = freq;
+
+  filter.type = "bandpass";
+  filter.frequency.value = freq * 2;
+  filter.Q.value = 1.2;
+
+  panner.pan.value = (x * 2 - 1) * 0.75;
+
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(velocity, now + 0.005);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+  osc.connect(filter);
+  filter.connect(env);
+  env.connect(panner);
+  panner.connect(masterGain);
+
+  osc.start(now);
+  osc.stop(now + 0.4);
+}
+
+// ── WebSocket ─────────────────────────────────────────
+
+function connectWS() {
+  socket = new WebSocket(WS_URL);
+
+  socket.onopen = () => {
+    const dot = document.getElementById("dot-ws");
+    const label = document.getElementById("label-ws");
+
+    if (dot) dot.className = "dot live";
+    if (label) label.innerText = "Detector live";
+  };
+
+  socket.onerror = () => {
+    const dot = document.getElementById("dot-ws");
+    const label = document.getElementById("label-ws");
+
+    if (dot) dot.className = "dot error";
+    if (label) label.innerText = "Socket error";
+  };
+
+  socket.onclose = () => {
+    const dot = document.getElementById("dot-ws");
+    const label = document.getElementById("label-ws");
+
+    if (dot) dot.className = "dot error";
+    if (label) label.innerText = "Disconnected";
+
+    if (started) {
+      setTimeout(connectWS, 1500);
+    }
+  };
+
+  socket.onmessage = (e) => {
+    if (!started) return;
+
+    const msg = e.data.toString().trim();
+
+    try {
+      const data = JSON.parse(msg);
+
+      if (data.bears) {
+        onBearData(data.bears);
+      }
+    } catch (err) {
+      console.log("bad detector json:", msg);
+    }
+  };
+}
+
+// ── Start ─────────────────────────────────────────────
+
+async function startAll() {
+  if (started) return;
+
+  started = true;
+
+  await buildAudioGraph();
+
+  if (audioCtx.state === "suspended") {
+    await audioCtx.resume();
+  }
+
+  const overlay = document.getElementById("start-overlay");
+
+  if (overlay) {
+    overlay.classList.add("hidden");
+  }
+
+  const dot = document.getElementById("dot-audio");
+  const label = document.getElementById("label-audio");
+
+  if (dot) dot.className = "dot ready";
+  if (label) label.innerText = "Audio running";
+
+  connectWS();
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("begin-audio");
+
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    await startAll();
+  });
+});
+</script>
+
+</body>
+</html>
