@@ -249,6 +249,7 @@ let padGain;
 let droneGain;
 
 let sceneMuted = false;
+let lastBearUpdate = 0;
 
 let smoothMain = {
   x: 0.5,
@@ -733,8 +734,15 @@ function connectWS() {
       const data = JSON.parse(msg);
 
       if (data.bears) {
-        onBearData(data.bears);
+
+        lastBearUpdate =
+          performance.now();
+
+        onBearData(
+          data.bears
+        );
       }
+
     } catch (err) {
       console.log("bad detector json:", msg);
     }
@@ -768,6 +776,46 @@ async function startAll() {
 
   connectWS();
 }
+
+setInterval(() => {
+
+  const label =
+    document.getElementById(
+      "label-ws"
+    );
+
+  const dot =
+    document.getElementById(
+      "dot-ws"
+    );
+
+  if (!label || !dot) return;
+
+  const idle =
+    performance.now()
+    - lastBearUpdate;
+
+  if (idle < 15000) {
+
+    label.innerText =
+      "LIVE DETECTOR";
+
+    dot.className =
+      "dot live";
+
+  }
+
+  else {
+
+    label.innerText =
+      "BEARS RESTING";
+
+    dot.className =
+      "dot ready";
+
+  }
+
+}, 2000);
 
 window.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("begin-audio");
