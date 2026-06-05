@@ -89,7 +89,7 @@ def resolve_url(youtube_url):
             [
                 "yt-dlp",
                 "-f",
-                "best[height<=720]",
+                "best[height<=480]",
                 "-g",
                 "--no-warnings",
                 youtube_url
@@ -100,6 +100,9 @@ def resolve_url(youtube_url):
         )
 
         url = result.stdout.strip()
+
+        if result.stderr.strip():
+            error(result.stderr.strip())
 
         if not url:
             error("yt-dlp returned empty URL.")
