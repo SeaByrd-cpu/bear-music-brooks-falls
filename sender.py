@@ -60,6 +60,9 @@ try:
                 timeout=1
             )
 
+            print("POSTED:", payload)
+            print("RENDER RESPONSE:", r.status_code, r.text)
+
             if r.status_code != 200:
                 print("Upload failed:", r.status_code, r.text)
 
