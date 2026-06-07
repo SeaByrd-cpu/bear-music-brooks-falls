@@ -87,6 +87,8 @@ def resolve_url(youtube_url):
     try:
         result = subprocess.run(
             [
+                sys.executable,
+                "-m"
                 "yt-dlp",
                 "-f",
                 "best[height<=480]",
