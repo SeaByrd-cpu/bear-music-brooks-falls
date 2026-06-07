@@ -89,7 +89,7 @@ def resolve_url(youtube_url):
             [
                 sys.executable,
                 "-m"
-                "yt-dlp",
+                "yt_dlp",
                 "-f",
                 "best[height<=480]",
                 "-g",
