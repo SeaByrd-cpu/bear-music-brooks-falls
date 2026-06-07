@@ -288,7 +288,7 @@ def run():
         height = 540
 
         ffmpeg_cmd = [
-            r"C:\Users\court_lul9d88\Desktop\ffmpeg-8.0-essentials_build\bin\ffmpeg.exe",
+            "ffmpeg",
             "-loglevel",
             "error",
             "-i",
