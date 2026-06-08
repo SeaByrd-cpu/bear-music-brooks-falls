@@ -709,53 +709,57 @@ function connectWS() {
     if (label) label.innerText = "Detector live";
   };
 
-  socket.onerror = (err) => {
-    console.log("WebSocket ERROR:", err);
+  socket.onerror = (event) => {
+    console.log("WebSocket ERROR:", event);
+
+    const dot = document.getElementById("dot-ws");
+    const label = document.getElementById("label-ws");
+
+    if (dot) dot.className = "dot error";
+    if (label) label.innerText = "Socket error";
   };
 
   socket.onclose = (event) => {
     console.log("WebSocket CLOSED:", event.code, event.reason);
+
+    const dot = document.getElementById("dot-ws");
+    const label = document.getElementById("label-ws");
+
+    if (dot) dot.className = "dot error";
+    if (label) label.innerText = "Disconnected";
+
+    if (started) {
+      setTimeout(connectWS, 1500);
+    }
   };
 
-  socket.onmessage = (e) => {
-    console.log("RAW WS:", e.data);
-    // keep rest of your message code here
-  };
-}
+  socket.onmessage = (event) => {
+    console.log("RAW WS:", event.data);
 
     if (!started) {
       console.log("message ignored: not started");
       return;
     }
 
-    const msg = e.data.toString().trim();
+    const msg = event.data.toString().trim();
 
     try {
-
       const data = JSON.parse(msg);
 
-      console.log("PARSED:", data);
+      console.log("PARSED WS:", data);
 
       if (data.bears) {
+        console.log("BEARS RECEIVED:", data.bears.length);
 
-        console.log(
-          "BEARS RECEIVED:",
-          data.bears.length
-        );
-
-        lastBearUpdate =
-          performance.now();
+        lastBearUpdate = performance.now();
 
         onBearData(data.bears);
       }
-
     } catch (err) {
-
-      console.log(
-        "bad detector json:",
-        msg
-      );
+      console.log("bad detector json:", msg, err);
     }
+  };
+}
 
 // ── Start ─────────────────────────────────────────────
 
