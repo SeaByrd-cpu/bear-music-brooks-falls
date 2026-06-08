@@ -695,9 +695,13 @@ function movementPluck(freq, velocity, x) {
 // ── WebSocket ─────────────────────────────────────────
 
 function connectWS() {
+  console.log("Trying WebSocket:", WS_URL);
+
   socket = new WebSocket(WS_URL);
 
   socket.onopen = () => {
+    console.log("WebSocket OPEN");
+
     const dot = document.getElementById("dot-ws");
     const label = document.getElementById("label-ws");
 
@@ -705,29 +709,19 @@ function connectWS() {
     if (label) label.innerText = "Detector live";
   };
 
-  socket.onerror = () => {
-    const dot = document.getElementById("dot-ws");
-    const label = document.getElementById("label-ws");
-
-    if (dot) dot.className = "dot error";
-    if (label) label.innerText = "Socket error";
+  socket.onerror = (err) => {
+    console.log("WebSocket ERROR:", err);
   };
 
-  socket.onclose = () => {
-    const dot = document.getElementById("dot-ws");
-    const label = document.getElementById("label-ws");
-
-    if (dot) dot.className = "dot error";
-    if (label) label.innerText = "Disconnected";
-
-    if (started) {
-      setTimeout(connectWS, 1500);
-    }
+  socket.onclose = (event) => {
+    console.log("WebSocket CLOSED:", event.code, event.reason);
   };
 
   socket.onmessage = (e) => {
-
     console.log("RAW WS:", e.data);
+    // keep rest of your message code here
+  };
+}
 
     if (!started) {
       console.log("message ignored: not started");
@@ -762,8 +756,6 @@ function connectWS() {
         msg
       );
     }
-  };
-}
 
 // ── Start ─────────────────────────────────────────────
 
