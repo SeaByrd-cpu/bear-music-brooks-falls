@@ -15,15 +15,18 @@ const server = app.listen(HTTP_PORT, () => {
 const wss = new WebSocket.Server({ server });
 console.log("🐻 WebSocket attached to same server");
 
-wss.on("connection", (ws) => {
+wss.on("connection", () => {
   console.log("🌐 Browser connected via WebSocket");
-
-  ws.on("close", () => {
-    console.log("🌙 Browser disconnected");
-  });
 });
 
 function broadcast(msg) {
+
+  console.log(
+    "Broadcasting to",
+    wss.clients.size,
+    "clients"
+  );
+
   wss.clients.forEach((client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(msg);
