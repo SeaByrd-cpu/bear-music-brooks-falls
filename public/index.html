@@ -726,25 +726,41 @@ function connectWS() {
   };
 
   socket.onmessage = (e) => {
-    if (!started) return;
+
+    console.log("RAW WS:", e.data);
+
+    if (!started) {
+      console.log("message ignored: not started");
+      return;
+    }
 
     const msg = e.data.toString().trim();
 
     try {
+
       const data = JSON.parse(msg);
 
+      console.log("PARSED:", data);
+
       if (data.bears) {
+
+        console.log(
+          "BEARS RECEIVED:",
+          data.bears.length
+        );
 
         lastBearUpdate =
           performance.now();
 
-        onBearData(
-          data.bears
-        );
+        onBearData(data.bears);
       }
 
     } catch (err) {
-      console.log("bad detector json:", msg);
+
+      console.log(
+        "bad detector json:",
+        msg
+      );
     }
   };
 }
