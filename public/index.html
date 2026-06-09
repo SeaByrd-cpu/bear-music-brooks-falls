@@ -351,7 +351,7 @@ async function buildAudioGraph() {
   droneDetune.frequency.value = 55.3;
 
   droneGain = audioCtx.createGain();
-  droneGain.gain.value = 0.14;
+  droneGain.gain.value = 0.045;
 
   drone.connect(droneGain);
   droneDetune.connect(droneGain);
@@ -446,7 +446,7 @@ function onBearData(bears) {
 
   if (!bears || bears.length === 0) {
     padGain.gain.linearRampToValueAtTime(0.015, t + 1.0);
-    droneGain.gain.linearRampToValueAtTime(0.08, t + 1.5);
+    droneGain.gain.linearRampToValueAtTime(0.035 + area * 0.035, t + 1.0);
     return;
   }
 
@@ -634,7 +634,7 @@ function pluckNote(freq, velocity) {
 
   const now = audioCtx.currentTime;
 
-  if (now - lastPluckTime < 0.22) return;
+  if (now - lastPluckTime < 0.08) return;
 
   lastPluckTime = now;
 

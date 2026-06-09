@@ -54,7 +54,7 @@ try:
         try:
             payload = json.loads(line)
 
-             r = requests.post(
+            r = requests.post(
                 RENDER_INGEST_URL,
                 json=payload,
                 timeout=1
