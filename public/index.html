@@ -734,6 +734,17 @@ function connectWS() {
   };
 
   socket.onmessage = (event) => {
+
+    window.msgCount = 
+      (window.msgCount || 0) + 1;
+    
+    if (window.msgCount % 50 === 0) {
+        console.log(
+            "MSG RATE CHECK",
+            window.msgCount
+        );
+    }
+
     console.log("RAW WS:", event.data);
 
     if (!started) {
