@@ -567,7 +567,11 @@ function onBearData(bears) {
     targetGain *= 0.6;
   }
 
-  if (bear.behavior === "active") {
+  if (
+    bear.behavior === "active" ||
+    bear.behavior === "moving" ||
+    bear.speed > 0.004
+  ){
     targetGain *= 1.8;
   }
 
@@ -579,11 +583,11 @@ function onBearData(bears) {
   // movement-triggered plucks
   if (
     bear.behavior === "active"
-    && bear.speed > 0.015
+    && bear.speed > 0.004
   ) {
     pluckNote(
       freq,
-      Math.min(1, bear.speed * 15)
+      Math.min(1, bear.speed * 35)
     );
   }
 
