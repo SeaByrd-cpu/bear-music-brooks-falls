@@ -739,20 +739,7 @@ function connectWS() {
 
   socket.onmessage = (event) => {
 
-    window.msgCount = 
-      (window.msgCount || 0) + 1;
-    
-    if (window.msgCount % 50 === 0) {
-        console.log(
-            "MSG RATE CHECK",
-            window.msgCount
-        );
-    }
-
-    console.log("RAW WS:", event.data);
-
     if (!started) {
-      console.log("message ignored: not started");
       return;
     }
 
@@ -761,10 +748,7 @@ function connectWS() {
     try {
       const data = JSON.parse(msg);
 
-      console.log("PARSED WS:", data);
-
       if (data.bears) {
-        console.log("BEARS RECEIVED:", data.bears.length);
 
         lastBearUpdate = performance.now();
 
