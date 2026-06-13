@@ -446,7 +446,7 @@ function onBearData(bears) {
 
   if (!bears || bears.length === 0) {
     padGain.gain.linearRampToValueAtTime(0.015, t + 1.0);
-    droneGain.gain.linearRampToValueAtTime(0.035 + area * 0.035, t + 1.0);
+    droneGain.gain.linearRampToValueAtTime(0.08, t + 1.5);
     return;
   }
 
