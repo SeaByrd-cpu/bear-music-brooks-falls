@@ -270,6 +270,8 @@ const VOICE_TYPES = [
 
 let lastPluckTime = 0;
 
+let movementEnergy = 0;
+
 // ── Canvas ─────────────────────────────────────────────
 
 const canvas = document.getElementById("vis-canvas");
@@ -351,7 +353,7 @@ async function buildAudioGraph() {
   droneDetune.frequency.value = 55.3;
 
   droneGain = audioCtx.createGain();
-  droneGain.gain.value = 0.045;
+  droneGain.gain.value = 0.055;
 
   drone.connect(droneGain);
   droneDetune.connect(droneGain);
@@ -446,9 +448,18 @@ function onBearData(bears) {
 
   if (!bears || bears.length === 0) {
     padGain.gain.linearRampToValueAtTime(0.015, t + 1.0);
-    droneGain.gain.linearRampToValueAtTime(0.08, t + 1.5);
+    droneGain.gain.linearRampToValueAtTime(0.035, t + 1.5);
     return;
   }
+
+  const rawMovementEnergy = bears.reduce(
+    (sum, b) => sum + (b.speed || 0),
+    0
+  );
+
+  movementEnergy =
+    movementEnergy * 0.85 +
+    rawMovementEnergy * 0.15;
 
   const mainBear = bears[0];
 
@@ -481,7 +492,7 @@ function onBearData(bears) {
 
     drone.frequency.linearRampToValueAtTime(freq / 2, t + 1.2);
     droneDetune.frequency.linearRampToValueAtTime((freq / 2) + 0.3, t + 1.2);
-    droneGain.gain.linearRampToValueAtTime(0.12 + area * 0.08, t + 1.0);
+    droneGain.gain.linearRampToValueAtTime(0.045 + area * 0.035, t + 0.5);
   }
 
   for (const bear of bears) {
@@ -582,12 +593,17 @@ function onBearData(bears) {
 
   // movement-triggered plucks
   if (
-    bear.behavior === "active"
-    && bear.speed > 0.004
+    bear.behavior === "active" ||
+    bear.behavior === "moving" ||
+    bear.speed > 0.004 ||
+    movementEnergy > 0.012
   ) {
     pluckNote(
       freq,
-      Math.min(1, bear.speed * 35)
+      Math.min(
+        1,
+        bear.speed * 45 + movementEnergy * 12
+      )
     );
   }
 
