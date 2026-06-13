@@ -450,17 +450,37 @@ def run():
                 iterations=3
             )
 
-            # break thin water bridges
+            # Break thin water bridges between bears and land
+            bridge_kernel = np.ones((7, 7), np.uint8)
+
             fg_mask = cv2.erode(
                 fg_mask,
-                np.ones((5, 5), np.uint8),
+                bridge_kernel,
                 iterations=1
             )
 
             fg_mask = cv2.dilate(
                 fg_mask,
-                np.ones((3, 3), np.uint8),
+                np.ones((5, 5), np.uint8),
                 iterations=1
+            )
+
+            # Extra horizontal cleanup for water streaks / shoreline threads
+            horizontal_kernel = cv2.getStructuringElement(
+                cv2.MORPH_RECT,
+                (13, 3)
+            )
+
+            horizontal_threads = cv2.morphologyEx(
+                fg_mask,
+                cv2.MORPH_OPEN,
+                horizontal_kernel,
+                iterations=1
+            )
+
+            fg_mask = cv2.subtract(
+                fg_mask,
+                horizontal_threads
             )
 
             # Remove image-border junk
@@ -523,7 +543,7 @@ def run():
                     touches_top,
                     touches_bottom
                 ])
-                
+
                 # Reject green vegetation / moss / land masses
                 contour_mask = np.zeros(fg_mask.shape, dtype=np.uint8)
                 cv2.drawContours(contour_mask, [c], -1, 255, -1)
@@ -587,6 +607,14 @@ def run():
             )
 
             bears = bears[:MAX_BLOBS]
+
+            if len(bears) == 0: 
+                tracks.clear()
+
+            print(
+                f"Contours={len(contours)} Accepted={len(bears)}",
+                flush=True
+            )
 
             tracked_bears = update_tracks(bears)
 
