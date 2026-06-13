@@ -450,6 +450,19 @@ def run():
                 iterations=3
             )
 
+            # break thin water bridges
+            fg_mask = cv2.erode(
+                fg_mask,
+                np.ones((5, 5), np.uint8),
+                iterations=1
+            )
+
+            fg_mask = cv2.dilate(
+                fg_mask,
+                np.ones((3, 3), np.uint8),
+                iterations=1
+            )
+
             # Remove image-border junk
             fg_mask[:, 0:20] = 0
             fg_mask[:, -20:] = 0
@@ -484,8 +497,19 @@ def run():
                 ):
                     continue
 
-                # Reject enormous background regions
-                if area > roi_w * roi_h * 0.30 and aspect > 2.5:
+                # Reject long horizontal water / shoreline bands
+                if (
+                    area > roi_w * roi_h * 0.08
+                    and aspect > 4.0
+                ):
+                    continue
+
+                # Reject truly enormous background regions,
+                # but allow close-up bears
+                if (
+                    area > roi_w * roi_h * 0.65
+                    and aspect > 2.5
+                ):
                     continue
 
                 touches_left = x <= 2
@@ -499,7 +523,7 @@ def run():
                     touches_top,
                     touches_bottom
                 ])
-
+                
                 # Reject green vegetation / moss / land masses
                 contour_mask = np.zeros(fg_mask.shape, dtype=np.uint8)
                 cv2.drawContours(contour_mask, [c], -1, 255, -1)
@@ -523,7 +547,7 @@ def run():
                 if edge_touches >= 2 and area < roi_w * roi_h * 0.12:
                     continue
 
-                if aspect > 4.0:
+                if aspect > 5.5:
                     continue
 
                 if aspect < 0.25:
