@@ -250,6 +250,7 @@ let droneGain;
 
 let sceneMuted = false;
 let lastBearUpdate = 0;
+let restDrift = 0;
 
 let smoothMain = {
   x: 0.5,
@@ -260,6 +261,8 @@ let smoothMain = {
 const visualBlobs = [];
 
 const bearVoices = {};
+
+const bearNoteMemory = {};
 
 const VOICE_TYPES = [
   "low",
@@ -440,6 +443,41 @@ function buildReverb(ctx, duration, decay) {
   return buf;
 }
 
+function getBearNote(bear, baseIndex) {
+  if (!bearNoteMemory[bear.id]) {
+    bearNoteMemory[bear.id] = {
+      step: 0,
+      lastChange: 0
+    };
+  }
+
+  const memory = bearNoteMemory[bear.id];
+  const now = audioCtx.currentTime;
+
+  // Slowly advance even when bear is mostly still
+  const interval =
+    bear.speed > 0.006
+      ? 1.8
+      : 4.5;
+
+  if (now - memory.lastChange > interval) {
+    memory.step =
+      (memory.step + 1) % 4;
+
+    memory.lastChange = now;
+  }
+
+  const offsets = [0, 2, 4, 2];
+
+  return Math.max(
+    0,
+    Math.min(
+      SCALE_HZ.length - 1,
+      baseIndex + offsets[memory.step]
+    )
+  );
+}
+
 // ── Bear Data → Music ─────────────────────────────────
 
 function onBearData(bears) {
@@ -448,8 +486,31 @@ function onBearData(bears) {
   const t = audioCtx.currentTime;
 
   if (!bears || bears.length === 0) {
-    padGain.gain.linearRampToValueAtTime(0.015, t + 1.0);
-    droneGain.gain.linearRampToValueAtTime(0.035, t + 1.5);
+    restDrift += 0.01;
+
+    const drift =
+      Math.sin(restDrift) * 2.5;
+
+    drone.frequency.linearRampToValueAtTime(
+      55 + drift,
+      t + 2.0
+    );
+
+    droneDetune.frequency.linearRampToValueAtTime(
+      55.3 - drift * 0.4,
+      t + 2.4
+    );
+
+    padGain.gain.linearRampToValueAtTime(
+      0.018,
+      t + 1.5
+    );
+
+    droneGain.gain.linearRampToValueAtTime(
+      0.035,
+      t + 2.0
+    );
+
     return;
   }
 
@@ -458,7 +519,7 @@ function onBearData(bears) {
   const avgY = bears.reduce((sum, b) => sum + (b.y || 0), 0) / bears.length;
 
   const sceneSignature = {
-    count: bearCount,
+    count: sceneBearCount,
     areaBucket: Math.round(totalArea * 4),
     heightBucket: Math.round(avgY * 5)
   };
@@ -478,7 +539,7 @@ function onBearData(bears) {
     lastSceneChangeTime = audioCtx.currentTime;
 
     pluckNote(
-      SCALE_HZ[Math.min(SCALE_HZ.length - 1, 4 + bearCount)],
+      SCALE_HZ[Math.min(SCALE_HZ.length - 1, 4 + sceneBearCount)],
       0.35
     );
 
@@ -519,7 +580,7 @@ function onBearData(bears) {
   if (mainBear.state === "mass") {
     drone.frequency.linearRampToValueAtTime(55, t + 1.5);
     droneDetune.frequency.linearRampToValueAtTime(55.3, t + 1.5);
-    droneGain.gain.linearRampToValueAtTime(0.16 + massCount * 0.03, t + 1.0);
+    droneGain.gain.linearRampToValueAtTime(0.055 + massCount * 0.015, t + 1.0);
     padGain.gain.linearRampToValueAtTime(0.025, t + 1.0);
   } else {
     pad.frequency.linearRampToValueAtTime(freq, t + 0.25);
@@ -543,9 +604,12 @@ function onBearData(bears) {
 
   const t = audioCtx.currentTime;
 
-  const noteIndex = Math.floor(
-    (1 - bear.y) * (SCALE_HZ.length - 1)
+  const baseNoteIndex = Math.floor(
+  (1 - bear.y) * (SCALE_HZ.length - 1)
   );
+
+  const noteIndex =
+    getBearNote(bear, baseNoteIndex);
 
   let freq = SCALE_HZ[noteIndex];
 
