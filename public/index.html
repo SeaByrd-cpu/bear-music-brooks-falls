@@ -269,8 +269,9 @@ const VOICE_TYPES = [
 ];
 
 let lastPluckTime = 0;
-
 let movementEnergy = 0;
+let lastSceneSignature = null;
+let lastSceneChangeTime = 0;
 
 // ── Canvas ─────────────────────────────────────────────
 
@@ -451,6 +452,41 @@ function onBearData(bears) {
     droneGain.gain.linearRampToValueAtTime(0.035, t + 1.5);
     return;
   }
+
+  const sceneBearCount = bears.filter(b => b.state === "bear").length;
+  const totalArea = bears.reduce((sum, b) => sum + (b.area || 0), 0);
+  const avgY = bears.reduce((sum, b) => sum + (b.y || 0), 0) / bears.length;
+
+  const sceneSignature = {
+    count: bearCount,
+    areaBucket: Math.round(totalArea * 4),
+    heightBucket: Math.round(avgY * 5)
+  };
+
+  const sceneChanged =
+    lastSceneSignature &&
+    (
+      Math.abs(sceneSignature.count - lastSceneSignature.count) >= 2 ||
+      Math.abs(sceneSignature.areaBucket - lastSceneSignature.areaBucket) >= 2 ||
+      Math.abs(sceneSignature.heightBucket - lastSceneSignature.heightBucket) >= 2
+    );
+
+  if (
+    sceneChanged &&
+    audioCtx.currentTime - lastSceneChangeTime > 1.5
+  ) {
+    lastSceneChangeTime = audioCtx.currentTime;
+
+    pluckNote(
+      SCALE_HZ[Math.min(SCALE_HZ.length - 1, 4 + bearCount)],
+      0.35
+    );
+
+    padGain.gain.cancelScheduledValues(audioCtx.currentTime);
+    droneGain.gain.cancelScheduledValues(audioCtx.currentTime);
+  }
+
+  lastSceneSignature = sceneSignature;
 
   const rawMovementEnergy = bears.reduce(
     (sum, b) => sum + (b.speed || 0),
