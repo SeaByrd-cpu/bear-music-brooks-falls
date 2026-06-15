@@ -524,6 +524,17 @@ function onBearData(bears) {
       t + 1.8
     );
 
+    // Fade out any lingering bear voices when detection drops out
+    for (const id in bearVoices) {
+      const voice = bearVoices[id];
+
+      voice.gain.gain.cancelScheduledValues(t);
+      voice.gain.gain.linearRampToValueAtTime(
+        0.0,
+        t + 1.5
+      );
+    }
+
     return;
   }
 
