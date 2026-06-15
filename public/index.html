@@ -486,29 +486,42 @@ function onBearData(bears) {
   const t = audioCtx.currentTime;
 
   if (!bears || bears.length === 0) {
-    restDrift += 0.01;
+    restDrift += 0.018;
 
     const drift =
-      Math.sin(restDrift) * 2.5;
+      Math.sin(restDrift) * 3.5;
+
+    const slowPulse =
+      0.5 + 0.5 * Math.sin(restDrift * 0.37);
 
     drone.frequency.linearRampToValueAtTime(
       55 + drift,
-      t + 2.0
+      t + 1.2
     );
 
     droneDetune.frequency.linearRampToValueAtTime(
-      55.3 - drift * 0.4,
-      t + 2.4
+      55.4 - drift * 0.5,
+      t + 1.6
+    );
+
+    pad.frequency.linearRampToValueAtTime(
+      110 + slowPulse * 18,
+      t + 2.0
+    );
+
+    padFilter.frequency.linearRampToValueAtTime(
+      450 + slowPulse * 500,
+      t + 1.5
     );
 
     padGain.gain.linearRampToValueAtTime(
-      0.018,
+      0.022 + slowPulse * 0.012,
       t + 1.5
     );
 
     droneGain.gain.linearRampToValueAtTime(
-      0.035,
-      t + 2.0
+      0.022 + slowPulse * 0.012,
+      t + 1.8
     );
 
     return;
