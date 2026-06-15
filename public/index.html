@@ -691,7 +691,7 @@ function onBearData(bears) {
   }
 
   if (type === "bell") {
-    targetGain *= 0.5;
+    targetGain *= 0.28;
   }
 
   if (type === "pulse") {
@@ -793,7 +793,7 @@ function pluckNote(freq, velocity) {
   filter.frequency.value = 1800;
 
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(velocity * 0.12, now + 0.01);
+  env.gain.linearRampToValueAtTime(velocity * 0.07, now + 0.03);
   env.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
 
   osc.connect(filter);
