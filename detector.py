@@ -451,36 +451,16 @@ def run():
             )
 
             # Break thin water bridges between bears and land
-            bridge_kernel = np.ones((7, 7), np.uint8)
-
             fg_mask = cv2.erode(
-                fg_mask,
-                bridge_kernel,
-                iterations=1
-            )
-
-            fg_mask = cv2.dilate(
                 fg_mask,
                 np.ones((5, 5), np.uint8),
                 iterations=1
             )
 
-            # Extra horizontal cleanup for water streaks / shoreline threads
-            horizontal_kernel = cv2.getStructuringElement(
-                cv2.MORPH_RECT,
-                (13, 3)
-            )
-
-            horizontal_threads = cv2.morphologyEx(
+            fg_mask = cv2.dilate(
                 fg_mask,
-                cv2.MORPH_OPEN,
-                horizontal_kernel,
+                np.ones((3, 3), np.uint8),
                 iterations=1
-            )
-
-            fg_mask = cv2.subtract(
-                fg_mask,
-                horizontal_threads
             )
 
             # Remove image-border junk
@@ -575,7 +555,7 @@ def run():
 
                 density = area / max(w * h, 1)
 
-                if density < 0.12:
+                if density < 0.07:
                     continue
 
                 M = cv2.moments(c)
