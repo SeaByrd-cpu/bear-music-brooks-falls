@@ -247,6 +247,7 @@ let masterGain;
 let padFilter;
 let padGain;
 let droneGain;
+let droneFilter;
 
 let sceneMuted = false;
 let lastBearUpdate = 0;
@@ -341,7 +342,7 @@ async function buildAudioGraph() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.7;
+  masterGain.gain.value = 1.2;
   masterGain.connect(audioCtx.destination);
 
   reverb = audioCtx.createConvolver();
@@ -359,9 +360,15 @@ async function buildAudioGraph() {
   droneGain = audioCtx.createGain();
   droneGain.gain.value = 0.055;
 
+  droneFilter = audioCtx.createBiquadFilter();
+  droneFilter.type = "lowpass";
+  droneFilter.frequency.value = 360;
+  droneFilter.Q.value = 0.4;
+
   drone.connect(droneGain);
   droneDetune.connect(droneGain);
-  droneGain.connect(reverb);
+  droneGain.connect(droneFilter);
+  droneFilter.connect(reverb);
 
   drone.start();
   droneDetune.start();
@@ -520,8 +527,8 @@ function onBearData(bears) {
     );
 
     droneGain.gain.linearRampToValueAtTime(
-      0.022 + slowPulse * 0.012,
-      t + 1.8
+      0.018 + slowPulse * 0.012,
+      t + 0.8
     );
 
     // Fade out any lingering bear voices when detection drops out
@@ -612,20 +619,28 @@ function onBearData(bears) {
     padGain.gain.linearRampToValueAtTime(volume + bearCount * 0.015, t + 0.2);
 
     const droneWander =
-      Math.sin(audioCtx.currentTime * 0.23) * 3.0;
+      Math.sin(audioCtx.currentTime * 0.19) * 2.5;
+
+    const droneBase =
+      Math.max(48, Math.min(120, freq / 3));
 
     drone.frequency.linearRampToValueAtTime(
-      freq / 2 + droneWander,
-      t + 0.8
+      droneBase + droneWander,
+      t + 1.0
     );
 
     droneDetune.frequency.linearRampToValueAtTime(
-      freq / 2 + 0.6 - droneWander * 0.35,
-      t + 1.1
+      droneBase + 0.7 - droneWander * 0.35,
+      t + 1.4
+    );
+
+    droneFilter.frequency.linearRampToValueAtTime(
+      260 + movementEnergy * 900,
+      t + 1.0
     );
 
     droneGain.gain.linearRampToValueAtTime(
-      0.028 + area * 0.018,
+      0.018 + area * 0.012,
       t + 0.8
     );
   }
@@ -725,8 +740,8 @@ function onBearData(bears) {
   }
 
   voice.gain.gain.linearRampToValueAtTime(
-    targetGain,
-    t + 0.4
+    Math.min(0.09, targetGain),
+    t + 0.5
   );
 
   // movement-triggered plucks
@@ -807,7 +822,7 @@ function pluckNote(freq, velocity) {
   filter.frequency.value = 1800;
 
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(velocity * 0.07, now + 0.03);
+  env.gain.linearRampToValueAtTime(velocity * 0.055, now + 0.03);
   env.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
 
   osc.connect(filter);
