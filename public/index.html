@@ -611,9 +611,23 @@ function onBearData(bears) {
     padFilter.frequency.linearRampToValueAtTime(filterFreq, t + 0.2);
     padGain.gain.linearRampToValueAtTime(volume + bearCount * 0.015, t + 0.2);
 
-    drone.frequency.linearRampToValueAtTime(freq / 2, t + 1.2);
-    droneDetune.frequency.linearRampToValueAtTime((freq / 2) + 0.3, t + 1.2);
-    droneGain.gain.linearRampToValueAtTime(0.045 + area * 0.035, t + 0.5);
+    const droneWander =
+      Math.sin(audioCtx.currentTime * 0.23) * 3.0;
+
+    drone.frequency.linearRampToValueAtTime(
+      freq / 2 + droneWander,
+      t + 0.8
+    );
+
+    droneDetune.frequency.linearRampToValueAtTime(
+      freq / 2 + 0.6 - droneWander * 0.35,
+      t + 1.1
+    );
+
+    droneGain.gain.linearRampToValueAtTime(
+      0.028 + area * 0.018,
+      t + 0.8
+    );
   }
 
   for (const bear of bears) {

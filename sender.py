@@ -57,14 +57,14 @@ try:
             r = requests.post(
                 RENDER_INGEST_URL,
                 json=payload,
-                timeout=1
+                timeout=3
             )
 
             if r.status_code != 200:
                 print("Upload failed:", r.status_code, r.text)
         
         except requests.exceptions.RequestException as e:
-                    print("Upload error:", e)
+                    print("Upload skipped:", str(e)[:120])
 
         except json.JSONDecodeError:
             print("Bad JSON:", line)
