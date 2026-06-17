@@ -362,8 +362,8 @@ async function buildAudioGraph() {
 
   droneFilter = audioCtx.createBiquadFilter();
   droneFilter.type = "lowpass";
-  droneFilter.frequency.value = 360;
-  droneFilter.Q.value = 0.4;
+  droneFilter.frequency.value = 700;
+  droneFilter.Q.value = 0.7;
 
   drone.connect(droneGain);
   droneDetune.connect(droneGain);
@@ -527,8 +527,8 @@ function onBearData(bears) {
     );
 
     droneGain.gain.linearRampToValueAtTime(
-      0.018 + slowPulse * 0.012,
-      t + 0.8
+      0.035 + slowPulse * 0.012,
+      t + 1.5
     );
 
     // Fade out any lingering bear voices when detection drops out
