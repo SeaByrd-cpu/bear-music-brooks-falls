@@ -276,6 +276,8 @@ let lastPluckTime = 0;
 let movementEnergy = 0;
 let lastSceneSignature = null;
 let lastSceneChangeTime = 0;
+let lastFlowPulseTime = 0;
+let flowStep = 0;
 
 // ── Canvas ─────────────────────────────────────────────
 
@@ -527,7 +529,7 @@ function onBearData(bears) {
     );
 
     droneGain.gain.linearRampToValueAtTime(
-      0.035 + slowPulse * 0.012,
+      0.045 + slowPulse * 0.014,
       t + 1.5
     );
 
@@ -640,8 +642,8 @@ function onBearData(bears) {
     );
 
     droneGain.gain.linearRampToValueAtTime(
-      0.018 + area * 0.012,
-      t + 0.8
+      0.028 + area * 0.018,
+      t + 0.9
     );
   }
 
@@ -720,7 +722,7 @@ function onBearData(bears) {
   }
 
   if (type === "bell") {
-    targetGain *= 0.28;
+    targetGain *= 0.22;
   }
 
   if (type === "pulse") {
@@ -757,6 +759,21 @@ function onBearData(bears) {
         1,
         bear.speed * 45 + movementEnergy * 12
       )
+    );
+  }
+
+  // NEW — soft flowing mid layer
+  if (
+    movementEnergy > 0.01 ||
+    bear.speed > 0.003
+  ) {
+    flowPulse(
+      freq,
+      Math.min(
+        1,
+        0.25 + movementEnergy * 6
+      ),
+      bear.x
     );
   }
 
@@ -815,22 +832,29 @@ function pluckNote(freq, velocity) {
   const env = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
 
-  osc.type = "sine";
-  osc.frequency.value = freq;
+  osc.type = "triangle";
+  osc.frequency.value = freq * 0.75;
 
-  filter.type = "lowpass";
-  filter.frequency.value = 1800;
+  filter.type = "bandpass";
+  filter.frequency.value = freq * 1.5;
+  filter.Q.value = 0.9;
 
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(velocity * 0.055, now + 0.03);
-  env.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
+  env.gain.linearRampToValueAtTime(
+    velocity * 0.075,
+    now + 0.02
+  );
+  env.gain.exponentialRampToValueAtTime(
+    0.001,
+    now + 0.55
+  );
 
   osc.connect(filter);
   filter.connect(env);
   env.connect(masterGain);
 
   osc.start(now);
-  osc.stop(now + 2);
+  osc.stop(now + 0.7);
 }
 
 function movementPluck(freq, velocity, x) {
@@ -863,6 +887,63 @@ function movementPluck(freq, velocity, x) {
 
   osc.start(now);
   osc.stop(now + 0.4);
+}
+
+function flowPulse(freq, velocity, x) {
+  if (!audioCtx) return;
+
+  const now = audioCtx.currentTime;
+
+  if (now - lastFlowPulseTime < 0.45) return;
+
+  lastFlowPulseTime = now;
+
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  const panner = audioCtx.createStereoPanner();
+
+  osc.type = "triangle";
+
+  const pattern = [0, 2, 4, 2, 5, 4];
+  const offset = pattern[flowStep % pattern.length];
+
+  flowStep++;
+
+  const baseIndex = SCALE_HZ.findIndex(n => n >= freq);
+  const safeIndex = Math.max(
+    0,
+    Math.min(
+      SCALE_HZ.length - 1,
+      baseIndex + offset
+    )
+  );
+
+  osc.frequency.value = SCALE_HZ[safeIndex] * 0.75;
+
+  filter.type = "lowpass";
+  filter.frequency.value = 700;
+  filter.Q.value = 0.6;
+
+  panner.pan.value = (x * 2 - 1) * 0.45;
+
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(
+    velocity * 0.055,
+    now + 0.04
+  );
+  env.gain.exponentialRampToValueAtTime(
+    0.001,
+    now + 1.2
+  );
+
+  osc.connect(filter);
+  filter.connect(env);
+  env.connect(panner);
+  panner.connect(reverb);
+
+  osc.start(now);
+  osc.stop(now + 1.4);
 }
 
 // ── WebSocket ─────────────────────────────────────────
