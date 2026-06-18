@@ -841,20 +841,20 @@ function pluckNote(freq, velocity) {
 
   env.gain.setValueAtTime(0, now);
   env.gain.linearRampToValueAtTime(
-    velocity * 0.075,
-    now + 0.02
+  velocity * 0.055,
+  now + 0.05
   );
   env.gain.exponentialRampToValueAtTime(
     0.001,
-    now + 0.55
+    now + 1.4
   );
 
   osc.connect(filter);
   filter.connect(env);
-  env.connect(masterGain);
+  env.connect(reverb);
 
   osc.start(now);
-  osc.stop(now + 0.7);
+  osc.stop(now + 1.6);
 }
 
 function movementPluck(freq, velocity, x) {
