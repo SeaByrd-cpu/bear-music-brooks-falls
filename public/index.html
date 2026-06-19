@@ -798,7 +798,7 @@ function onBearData(bears) {
   }
 
   if (type === "bell") {
-    targetGain *= 0.22;
+    targetGain *= 0.4;
   }
 
   if (type === "pulse") {
@@ -816,10 +816,10 @@ function onBearData(bears) {
   ){
     // bells already brighten via the shimmer pluck below —
     // give them a gentler movement boost so they don't spike
-    targetGain *= (type === "bell") ? 1.15 : 1.8;
+    targetGain *= (type === "bell") ? 1.15 : 2.0;
   }
 
-  const gainCeiling = (type === "bell") ? 0.045 : 0.09;
+  const gainCeiling = (type === "bell") ? 0.05 : 0.5;
 
   voice.gain.gain.linearRampToValueAtTime(
     Math.min(gainCeiling, targetGain),
@@ -876,7 +876,7 @@ function onBearData(bears) {
   // bell shimmer layer
   if (
     type === "bell"
-    && bear.speed > 0.012
+    && bear.speed > 0.01
   ) {
 
     pluckNote(
