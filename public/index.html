@@ -252,6 +252,8 @@ let droneFilter;
 let sceneMuted = false;
 let lastBearUpdate = 0;
 let restDrift = 0;
+let restWander = 0;
+let wasEmpty = false;
 
 let smoothMain = {
   x: 0.5,
@@ -276,7 +278,7 @@ let lastPluckTime = 0;
 let movementEnergy = 0;
 let lastSceneSignature = null;
 let lastSceneChangeTime = 0;
-let lastFlowPulseTime = 0;
+let lastFlowPulseTimes = {};
 let flowStep = 0;
 
 // ── Canvas ─────────────────────────────────────────────
@@ -344,7 +346,7 @@ async function buildAudioGraph() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1.2;
+  masterGain.gain.value = 1.25;
   masterGain.connect(audioCtx.destination);
 
   reverb = audioCtx.createConvolver();
@@ -436,6 +438,29 @@ function createBearVoice(id) {
   return bearVoices[id];
 }
 
+function removeBearVoice(id) {
+  const voice = bearVoices[id];
+
+  if (!voice) return;
+
+  const t = audioCtx.currentTime;
+
+  // cancel any in-flight ramps so this is the final word
+  voice.gain.gain.cancelScheduledValues(t);
+  voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
+  voice.gain.gain.linearRampToValueAtTime(0.0, t + 1.5);
+
+  try {
+    voice.osc.stop(t + 1.6);
+  } catch (err) {
+    // already stopped — fine
+  }
+
+  delete bearVoices[id];
+  delete bearNoteMemory[id];
+  delete lastFlowPulseTimes[id];
+}
+
 function buildReverb(ctx, duration, decay) {
   const rate = ctx.sampleRate;
   const len = Math.floor(rate * duration);
@@ -495,13 +520,32 @@ function onBearData(bears) {
   const t = audioCtx.currentTime;
 
   if (!bears || bears.length === 0) {
+
+    if (!wasEmpty) {
+      // soft settling tone — marks the transition into quiet,
+      // distinct from the brighter scene-change accent used for bears
+      pluckNote(
+        SCALE_HZ[1],
+        0.12
+      );
+    }
+
+    wasEmpty = true;
+
     restDrift += 0.018;
+    restDrift %= (Math.PI * 2 * 1000); // keep it bounded over long idle stretches
+
+    restWander += 0.0071; // independent, slower cycle — not a multiple of restDrift's rate
+    restWander %= (Math.PI * 2 * 1000);
 
     const drift =
       Math.sin(restDrift) * 3.5;
 
     const slowPulse =
-      0.5 + 0.5 * Math.sin(restDrift * 0.37);
+      0.5 + 0.5 * Math.sin(restWander);
+
+    const padWander =
+      0.5 + 0.5 * Math.sin(restWander * 1.7 + 1.3);
 
     drone.frequency.linearRampToValueAtTime(
       55 + drift,
@@ -514,7 +558,7 @@ function onBearData(bears) {
     );
 
     pad.frequency.linearRampToValueAtTime(
-      110 + slowPulse * 18,
+      110 + padWander * 18,
       t + 2.0
     );
 
@@ -533,11 +577,18 @@ function onBearData(bears) {
       t + 1.5
     );
 
-    // Fade out any lingering bear voices when detection drops out
+    // Fade out (and eventually remove) bear voices when detection drops out
     for (const id in bearVoices) {
       const voice = bearVoices[id];
+      const idle = performance.now() - voice.lastSeen;
+
+      if (idle > 8000) {
+        removeBearVoice(id);
+        continue;
+      }
 
       voice.gain.gain.cancelScheduledValues(t);
+      voice.gain.gain.setValueAtTime(voice.gain.gain.value, t);
       voice.gain.gain.linearRampToValueAtTime(
         0.0,
         t + 1.5
@@ -546,6 +597,8 @@ function onBearData(bears) {
 
     return;
   }
+
+  wasEmpty = false;
 
   const sceneBearCount = bears.filter(b => b.state === "bear").length;
   const totalArea = bears.reduce((sum, b) => sum + (b.area || 0), 0);
@@ -738,11 +791,15 @@ function onBearData(bears) {
     bear.behavior === "moving" ||
     bear.speed > 0.004
   ){
-    targetGain *= 1.8;
+    // bells already brighten via the shimmer pluck below —
+    // give them a gentler movement boost so they don't spike
+    targetGain *= (type === "bell") ? 1.15 : 1.8;
   }
 
+  const gainCeiling = (type === "bell") ? 0.045 : 0.09;
+
   voice.gain.gain.linearRampToValueAtTime(
-    Math.min(0.09, targetGain),
+    Math.min(gainCeiling, targetGain),
     t + 0.5
   );
 
@@ -773,19 +830,20 @@ function onBearData(bears) {
         1,
         0.25 + movementEnergy * 6
       ),
-      bear.x
+      bear.x,
+      bear.id
     );
   }
 
   // bell shimmer layer
   if (
     type === "bell"
-    && bear.speed > 0.01
+    && bear.speed > 0.012
   ) {
 
     pluckNote(
-      freq * 2,
-      0.15
+      freq * 1.25,
+      0.08
     );
   }
 
@@ -811,10 +869,7 @@ function onBearData(bears) {
     const idle = nowPerf - voice.lastSeen;
 
     if (idle > 8000) {
-      voice.gain.gain.linearRampToValueAtTime(
-        0.0,
-        audioCtx.currentTime + 2.0
-      );
+      removeBearVoice(id);
     }
   }
 }
@@ -889,14 +944,15 @@ function movementPluck(freq, velocity, x) {
   osc.stop(now + 0.4);
 }
 
-function flowPulse(freq, velocity, x) {
+function flowPulse(freq, velocity, x, bearId) {
   if (!audioCtx) return;
 
   const now = audioCtx.currentTime;
+  const lastTime = lastFlowPulseTimes[bearId] || 0;
 
-  if (now - lastFlowPulseTime < 0.45) return;
+  if (now - lastTime < 0.45) return;
 
-  lastFlowPulseTime = now;
+  lastFlowPulseTimes[bearId] = now;
 
   const osc = audioCtx.createOscillator();
   const env = audioCtx.createGain();
@@ -906,9 +962,15 @@ function flowPulse(freq, velocity, x) {
   osc.type = "triangle";
 
   const pattern = [0, 2, 4, 2, 5, 4];
-  const offset = pattern[flowStep % pattern.length];
 
-  flowStep++;
+  if (!bearNoteMemory[bearId]) {
+    bearNoteMemory[bearId] = { step: 0, lastChange: 0 };
+  }
+
+  const memory = bearNoteMemory[bearId];
+  const offset = pattern[memory.flowStep % pattern.length || 0];
+
+  memory.flowStep = (memory.flowStep || 0) + 1;
 
   const baseIndex = SCALE_HZ.findIndex(n => n >= freq);
   const safeIndex = Math.max(
