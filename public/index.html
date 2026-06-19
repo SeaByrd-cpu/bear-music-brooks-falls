@@ -346,7 +346,7 @@ async function buildAudioGraph() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1.25;
+  masterGain.gain.value = 1.80;
   masterGain.connect(audioCtx.destination);
 
   reverb = audioCtx.createConvolver();
