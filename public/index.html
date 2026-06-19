@@ -244,6 +244,7 @@ let droneDetune;
 let pad;
 let reverb;
 let masterGain;
+let compressor;
 let padFilter;
 let padGain;
 let droneGain;
@@ -254,6 +255,8 @@ let lastBearUpdate = 0;
 let restDrift = 0;
 let restWander = 0;
 let wasEmpty = false;
+let voiceAssignCounter = 0;
+let lastAmbientBellTime = 0;
 
 let smoothMain = {
   x: 0.5,
@@ -346,8 +349,20 @@ async function buildAudioGraph() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1.80;
-  masterGain.connect(audioCtx.destination);
+  masterGain.gain.value = 1.6;
+
+  // Compressor narrows the gap between quiet and loud moments —
+  // raises the floor on quiet passages, caps spikes on loud ones —
+  // so overall perceived volume can go up without peaks blowing out.
+  compressor = audioCtx.createDynamicsCompressor();
+  compressor.threshold.value = -28;
+  compressor.knee.value = 18;
+  compressor.ratio.value = 6;
+  compressor.attack.value = 0.012;
+  compressor.release.value = 0.3;
+
+  masterGain.connect(compressor);
+  compressor.connect(audioCtx.destination);
 
   reverb = audioCtx.createConvolver();
   reverb.buffer = buildReverb(audioCtx, 3.5, 2.0);
@@ -423,8 +438,13 @@ function createBearVoice(id) {
     0.06
   );
 
+  // Rotate through voice types in assignment order (not id % N) so
+  // "bell" reliably appears regularly instead of depending on which
+  // arbitrary ids the detector happened to hand out.
   const type =
-  VOICE_TYPES[id % VOICE_TYPES.length];
+    VOICE_TYPES[voiceAssignCounter % VOICE_TYPES.length];
+
+  voiceAssignCounter++;
 
   bearVoices[id] = {
     osc,
@@ -664,8 +684,11 @@ function onBearData(bears) {
   const bearCount = bears.filter(b => b.state === "bear").length;
 
   if (mainBear.state === "mass") {
-    drone.frequency.linearRampToValueAtTime(55, t + 1.5);
-    droneDetune.frequency.linearRampToValueAtTime(55.3, t + 1.5);
+    const massWander =
+      Math.sin(audioCtx.currentTime * 0.11) * 2.0;
+
+    drone.frequency.linearRampToValueAtTime(55 + massWander, t + 1.5);
+    droneDetune.frequency.linearRampToValueAtTime(55.3 - massWander * 0.4, t + 1.5);
     droneGain.gain.linearRampToValueAtTime(0.055 + massCount * 0.015, t + 1.0);
     padGain.gain.linearRampToValueAtTime(0.025, t + 1.0);
   } else {
@@ -832,6 +855,21 @@ function onBearData(bears) {
       ),
       bear.x,
       bear.id
+    );
+  }
+
+  // Ambient bell ping — independent of which voice types this
+  // bear's id happened to be assigned, so bell timbre is always
+  // present in the mix on a slow, regular cadence.
+  if (
+    audioCtx.currentTime - lastAmbientBellTime > 6
+    && bear.speed > 0.002
+  ) {
+    lastAmbientBellTime = audioCtx.currentTime;
+
+    pluckNote(
+      freq * 1.25,
+      0.1
     );
   }
 
