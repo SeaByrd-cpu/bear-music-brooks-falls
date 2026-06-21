@@ -32,7 +32,7 @@ signal.signal(signal.SIGTERM, stop_cleanly)
 
 
 detector = subprocess.Popen(
-    ["python3", "detector.py"],
+    ["python3", "detector.py"] + sys.argv[1:],
     stdout=subprocess.PIPE,
     stderr=sys.stderr,
     text=True
@@ -60,14 +60,17 @@ try:
                 timeout=3
             )
 
-            if r.status_code != 200:
-                print("Upload failed:", r.status_code, r.text)
-        
+            if r.status_code == 200:
+                bear_count = len(payload.get("bears", []))
+                print(f"✓ sent ({bear_count} bears)", flush=True)
+            else:
+                print("Upload failed:", r.status_code, r.text, flush=True)
+
         except requests.exceptions.RequestException as e:
-                    print("Upload skipped:", str(e)[:120])
+            print("✗ Upload skipped:", str(e)[:120], flush=True)
 
         except json.JSONDecodeError:
-            print("Bad JSON:", line)
+            print("Bad JSON:", line, flush=True)
 
 except KeyboardInterrupt:
     stop_cleanly()

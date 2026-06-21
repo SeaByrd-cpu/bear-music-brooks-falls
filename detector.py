@@ -609,10 +609,11 @@ def run():
             if len(bears) == 0: 
                 tracks.clear()
 
-            print(
-                f"Contours={len(contours)} Accepted={len(bears)}",
-                flush=True
-            )
+            if args.debug:
+                print(
+                    f"Contours={len(contours)} Accepted={len(bears)}",
+                    flush=True
+                )
 
             tracked_bears = update_tracks(bears)
 
@@ -689,6 +690,17 @@ def run():
                 cv2.imshow(
                     "Foreground Mask",
                     fg_mask
+                )
+
+                # Raw color-based bear mask, before water/green
+                # exclusion — compare against "Foreground Mask" to
+                # see whether the green/water exclusion steps are
+                # carving pieces out of a real bear's silhouette
+                # (this is the likely cause when a mostly-still bear
+                # gets rejected as too-small or shoreline-band).
+                cv2.imshow(
+                    "Raw Bear-Color Mask (before exclusions)",
+                    bear_mask
                 )
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
