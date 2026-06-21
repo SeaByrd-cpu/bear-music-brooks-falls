@@ -249,8 +249,6 @@ let padFilter;
 let padGain;
 let droneGain;
 let droneFilter;
-let densityVoice;
-let densityGain;
 
 let sceneMuted = false;
 let lastBearUpdate = 0;
@@ -381,16 +379,6 @@ async function buildAudioGraph() {
   droneDetune.type = "sine";
   droneDetune.frequency.value = 55.3;
 
-  // Scene-density voice: silent at low bear counts, fades in as
-  // more bears are present. An octave + fifth above the main drone
-  // so it reads as "the scene opened up," not just "got louder."
-  densityVoice = audioCtx.createOscillator();
-  densityVoice.type = "sine";
-  densityVoice.frequency.value = 55 * 3;
-
-  densityGain = audioCtx.createGain();
-  densityGain.gain.value = 0.0;
-
   droneGain = audioCtx.createGain();
   droneGain.gain.value = 0.055;
 
@@ -401,14 +389,11 @@ async function buildAudioGraph() {
 
   drone.connect(droneGain);
   droneDetune.connect(droneGain);
-  densityVoice.connect(densityGain);
-  densityGain.connect(droneFilter);
   droneGain.connect(droneFilter);
   droneFilter.connect(reverb);
 
   drone.start();
   droneDetune.start();
-  densityVoice.start();
 
   pad = audioCtx.createOscillator();
   pad.type = "triangle";
@@ -570,8 +555,6 @@ function onBearData(bears) {
 
     wasEmpty = true;
 
-    densityGain.gain.linearRampToValueAtTime(0.0, t + 1.5);
-
     restDrift += 0.018;
     restDrift %= (Math.PI * 2 * 1000); // keep it bounded over long idle stretches
 
@@ -724,7 +707,6 @@ function onBearData(bears) {
 
     droneGain.gain.linearRampToValueAtTime(0.055 + massCount * 0.02 + sceneDensity * 0.025, t + 1.0);
     padGain.gain.linearRampToValueAtTime(0.025 + sceneDensity * 0.02, t + 1.0);
-    densityGain.gain.linearRampToValueAtTime(sceneDensity * 0.02, t + 1.5);
   } else {
     pad.frequency.linearRampToValueAtTime(freq, t + 0.25);
 
@@ -767,11 +749,6 @@ function onBearData(bears) {
     droneFilter.frequency.linearRampToValueAtTime(
       260 + sceneOpenness * 1100,
       t + 1.0
-    );
-
-    densityGain.gain.linearRampToValueAtTime(
-      sceneDensity * 0.05,
-      t + 1.2
     );
 
     droneGain.gain.linearRampToValueAtTime(
