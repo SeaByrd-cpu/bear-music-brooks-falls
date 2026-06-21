@@ -483,6 +483,8 @@ def run():
                 area = cv2.contourArea(c)
 
                 if area < MIN_BEAR_AREA:
+                    if args.debug:
+                        log(f"reject: area<{MIN_BEAR_AREA} (area={area:.0f})")
                     continue
 
                 x, y, w, h = cv2.boundingRect(c)
@@ -495,6 +497,8 @@ def run():
                     and w > roi_w * 0.25
                     and aspect > 2.0
                 ):
+                    if args.debug:
+                        log(f"reject: shoreline-band (aspect={aspect:.2f} w={w} bottom_y={bottom_y})")
                     continue
 
                 # Reject long horizontal water / shoreline bands
@@ -502,6 +506,8 @@ def run():
                     area > roi_w * roi_h * 0.08
                     and aspect > 4.0
                 ):
+                    if args.debug:
+                        log(f"reject: horizontal-band (aspect={aspect:.2f} area_frac={area/(roi_w*roi_h):.2f})")
                     continue
 
                 # Reject truly enormous background regions,
@@ -510,6 +516,8 @@ def run():
                     area > roi_w * roi_h * 0.65
                     and aspect > 2.5
                 ):
+                    if args.debug:
+                        log(f"reject: enormous-background (aspect={aspect:.2f} area_frac={area/(roi_w*roi_h):.2f})")
                     continue
 
                 touches_left = x <= 2
@@ -541,21 +549,31 @@ def run():
                             or y < roi_h * 0.35
                         )
                 ):
+                    if args.debug:
+                        log(f"reject: vegetation-color (h={mean_h:.0f} s={mean_s:.0f} aspect={aspect:.2f})")
                     continue
 
                 # Allow large close-up bears, reject smaller edge junk
                 if edge_touches >= 2 and area < roi_w * roi_h * 0.12:
+                    if args.debug:
+                        log(f"reject: small-edge-junk (edge_touches={edge_touches} area_frac={area/(roi_w*roi_h):.2f})")
                     continue
 
                 if aspect > 5.5:
+                    if args.debug:
+                        log(f"reject: aspect-too-wide (aspect={aspect:.2f})")
                     continue
 
                 if aspect < 0.25:
+                    if args.debug:
+                        log(f"reject: aspect-too-tall (aspect={aspect:.2f})")
                     continue
 
                 density = area / max(w * h, 1)
 
                 if density < 0.07:
+                    if args.debug:
+                        log(f"reject: low-density (density={density:.3f} area_frac={area/(roi_w*roi_h):.2f})")
                     continue
 
                 M = cv2.moments(c)

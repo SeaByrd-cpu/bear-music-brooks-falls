@@ -798,7 +798,7 @@ function onBearData(bears) {
   }
 
   if (type === "bell") {
-    targetGain *= 0.4;
+    targetGain *= 0.22;
   }
 
   if (type === "pulse") {
@@ -814,12 +814,13 @@ function onBearData(bears) {
     bear.behavior === "moving" ||
     bear.speed > 0.004
   ){
-    // bells already brighten via the shimmer pluck below —
-    // give them a gentler movement boost so they don't spike
-    targetGain *= (type === "bell") ? 1.15 : 2.0;
+    // bell gets a real movement boost (this is the "action" cue),
+    // but the gainCeiling below is what actually prevents the old
+    // spike bug — not a watered-down multiplier.
+    targetGain *= (type === "bell") ? 1.6 : 1.8;
   }
 
-  const gainCeiling = (type === "bell") ? 0.05 : 0.5;
+  const gainCeiling = (type === "bell") ? 0.065 : 0.09;
 
   voice.gain.gain.linearRampToValueAtTime(
     Math.min(gainCeiling, targetGain),
@@ -858,30 +859,31 @@ function onBearData(bears) {
     );
   }
 
-  // Ambient bell ping — independent of which voice types this
-  // bear's id happened to be assigned, so bell timbre is always
-  // present in the mix on a slow, regular cadence.
+  // Quiet bell fallback — only during genuine stillness, so it
+  // fills silence without competing with the movement-driven
+  // bell shimmer above, which should read as the real "action" cue.
   if (
-    audioCtx.currentTime - lastAmbientBellTime > 6
-    && bear.speed > 0.002
+    audioCtx.currentTime - lastAmbientBellTime > 9
+    && bear.speed <= 0.002
+    && bear.speed > 0
   ) {
     lastAmbientBellTime = audioCtx.currentTime;
 
     pluckNote(
       freq * 1.25,
-      0.1
+      0.07
     );
   }
 
-  // bell shimmer layer
+  // bell shimmer layer — a real accent on movement, not background texture
   if (
     type === "bell"
     && bear.speed > 0.01
   ) {
 
     pluckNote(
-      freq * 1.25,
-      0.08
+      freq * 1.75,
+      0.22
     );
   }
 
