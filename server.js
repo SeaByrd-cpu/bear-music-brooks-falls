@@ -15,8 +15,42 @@ const server = app.listen(HTTP_PORT, () => {
 const wss = new WebSocket.Server({ server });
 console.log("🐻 WebSocket attached to same server");
 
-wss.on("connection", () => {
+// Heartbeat: detect dead connections that never get a clean close
+// event (common with idle proxies/hosts) and terminate them instead
+// of leaving the client thinking it's still connected to nothing.
+function heartbeat() {
+  this.isAlive = true;
+}
+
+wss.on("connection", (ws) => {
   console.log("🌐 Browser connected via WebSocket");
+
+  ws.isAlive = true;
+  ws.on("pong", heartbeat);
+
+  ws.on("close", () => {
+    console.log("🌐 Browser disconnected");
+  });
+
+  ws.on("error", (err) => {
+    console.log("⚠️ WebSocket client error:", err.message);
+  });
+});
+
+const pingInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) {
+      console.log("🔌 Terminating unresponsive client");
+      return ws.terminate();
+    }
+
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 20000);
+
+wss.on("close", () => {
+  clearInterval(pingInterval);
 });
 
 function broadcast(msg) {
@@ -48,4 +82,13 @@ app.post("/ingest", (req, res) => {
   broadcast(msg);
 
   res.json({ ok: true });
+});
+
+// Lightweight endpoint for an external uptime pinger (e.g.
+// UptimeRobot, cron-job.org) to hit every few minutes, so Render's
+// free-tier idle spin-down never triggers. Self-pinging from inside
+// the same process doesn't reliably prevent spin-down on Render —
+// an external pinger hitting this URL does.
+app.get("/health", (req, res) => {
+  res.json({ ok: true, uptime: process.uptime() });
 });

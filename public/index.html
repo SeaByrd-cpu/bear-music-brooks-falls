@@ -249,6 +249,8 @@ let padFilter;
 let padGain;
 let droneGain;
 let droneFilter;
+let densityVoice;
+let densityGain;
 
 let sceneMuted = false;
 let lastBearUpdate = 0;
@@ -349,17 +351,20 @@ async function buildAudioGraph() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = 1.6;
+  masterGain.gain.value = 2.1;
 
   // Compressor narrows the gap between quiet and loud moments —
   // raises the floor on quiet passages, caps spikes on loud ones —
   // so overall perceived volume can go up without peaks blowing out.
+  // Threshold/ratio loosened from earlier pass: that version was
+  // squashing bell accents along with unwanted spikes. This still
+  // catches true peaks but lets accents punch through more.
   compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.value = -28;
-  compressor.knee.value = 18;
-  compressor.ratio.value = 6;
-  compressor.attack.value = 0.012;
-  compressor.release.value = 0.3;
+  compressor.threshold.value = -18;
+  compressor.knee.value = 12;
+  compressor.ratio.value = 4;
+  compressor.attack.value = 0.008;
+  compressor.release.value = 0.25;
 
   masterGain.connect(compressor);
   compressor.connect(audioCtx.destination);
@@ -376,6 +381,16 @@ async function buildAudioGraph() {
   droneDetune.type = "sine";
   droneDetune.frequency.value = 55.3;
 
+  // Scene-density voice: silent at low bear counts, fades in as
+  // more bears are present. An octave + fifth above the main drone
+  // so it reads as "the scene opened up," not just "got louder."
+  densityVoice = audioCtx.createOscillator();
+  densityVoice.type = "sine";
+  densityVoice.frequency.value = 55 * 3;
+
+  densityGain = audioCtx.createGain();
+  densityGain.gain.value = 0.0;
+
   droneGain = audioCtx.createGain();
   droneGain.gain.value = 0.055;
 
@@ -386,11 +401,14 @@ async function buildAudioGraph() {
 
   drone.connect(droneGain);
   droneDetune.connect(droneGain);
+  densityVoice.connect(densityGain);
+  densityGain.connect(droneFilter);
   droneGain.connect(droneFilter);
   droneFilter.connect(reverb);
 
   drone.start();
   droneDetune.start();
+  densityVoice.start();
 
   pad = audioCtx.createOscillator();
   pad.type = "triangle";
@@ -552,6 +570,8 @@ function onBearData(bears) {
 
     wasEmpty = true;
 
+    densityGain.gain.linearRampToValueAtTime(0.0, t + 1.5);
+
     restDrift += 0.018;
     restDrift %= (Math.PI * 2 * 1000); // keep it bounded over long idle stretches
 
@@ -683,18 +703,40 @@ function onBearData(bears) {
   const massCount = bears.filter(b => b.state === "mass").length;
   const bearCount = bears.filter(b => b.state === "bear").length;
 
+  // Scene-density factor: how "full" is this moment, independent
+  // of which single bear happens to sit at bears[0]. This is what
+  // should make a 6-bear scene feel structurally different from a
+  // 1-bear scene, not just a fraction louder.
+  const sceneDensity = Math.min(1, (bears.length - 1) / 5);
+  const sceneOpenness = Math.min(1, movementEnergy * 4 + sceneDensity * 0.6);
+
   if (mainBear.state === "mass") {
     const massWander =
       Math.sin(audioCtx.currentTime * 0.11) * 2.0;
 
+    drone.frequency.cancelScheduledValues(t);
+    drone.frequency.setValueAtTime(drone.frequency.value, t);
     drone.frequency.linearRampToValueAtTime(55 + massWander, t + 1.5);
+
+    droneDetune.frequency.cancelScheduledValues(t);
+    droneDetune.frequency.setValueAtTime(droneDetune.frequency.value, t);
     droneDetune.frequency.linearRampToValueAtTime(55.3 - massWander * 0.4, t + 1.5);
-    droneGain.gain.linearRampToValueAtTime(0.055 + massCount * 0.015, t + 1.0);
-    padGain.gain.linearRampToValueAtTime(0.025, t + 1.0);
+
+    droneGain.gain.linearRampToValueAtTime(0.055 + massCount * 0.02 + sceneDensity * 0.025, t + 1.0);
+    padGain.gain.linearRampToValueAtTime(0.025 + sceneDensity * 0.02, t + 1.0);
+    densityGain.gain.linearRampToValueAtTime(sceneDensity * 0.02, t + 1.5);
   } else {
     pad.frequency.linearRampToValueAtTime(freq, t + 0.25);
-    padFilter.frequency.linearRampToValueAtTime(filterFreq, t + 0.2);
-    padGain.gain.linearRampToValueAtTime(volume + bearCount * 0.015, t + 0.2);
+
+    padFilter.frequency.linearRampToValueAtTime(
+      filterFreq + sceneOpenness * 900,
+      t + 0.2
+    );
+
+    padGain.gain.linearRampToValueAtTime(
+      volume + bearCount * 0.02 + sceneDensity * 0.03,
+      t + 0.2
+    );
 
     const droneWander =
       Math.sin(audioCtx.currentTime * 0.19) * 2.5;
@@ -702,10 +744,20 @@ function onBearData(bears) {
     const droneBase =
       Math.max(48, Math.min(120, freq / 3));
 
+    // Cancel any in-flight ramp before scheduling a new one.
+    // Without this, frames arriving faster than the 1s ramp
+    // duration stack overlapping ramps on the same param, which
+    // compounds into runaway/accelerating pitch movement.
+    drone.frequency.cancelScheduledValues(t);
+    drone.frequency.setValueAtTime(drone.frequency.value, t);
+
     drone.frequency.linearRampToValueAtTime(
       droneBase + droneWander,
       t + 1.0
     );
+
+    droneDetune.frequency.cancelScheduledValues(t);
+    droneDetune.frequency.setValueAtTime(droneDetune.frequency.value, t);
 
     droneDetune.frequency.linearRampToValueAtTime(
       droneBase + 0.7 - droneWander * 0.35,
@@ -713,8 +765,13 @@ function onBearData(bears) {
     );
 
     droneFilter.frequency.linearRampToValueAtTime(
-      260 + movementEnergy * 900,
+      260 + sceneOpenness * 1100,
       t + 1.0
+    );
+
+    densityGain.gain.linearRampToValueAtTime(
+      sceneDensity * 0.05,
+      t + 1.2
     );
 
     droneGain.gain.linearRampToValueAtTime(
@@ -820,7 +877,7 @@ function onBearData(bears) {
     targetGain *= (type === "bell") ? 1.6 : 1.8;
   }
 
-  const gainCeiling = (type === "bell") ? 0.065 : 0.09;
+  const gainCeiling = (type === "bell") ? 0.09 : 0.1;
 
   voice.gain.gain.linearRampToValueAtTime(
     Math.min(gainCeiling, targetGain),
@@ -883,7 +940,7 @@ function onBearData(bears) {
 
     pluckNote(
       freq * 1.75,
-      0.22
+      0.3
     );
   }
 
