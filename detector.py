@@ -399,7 +399,13 @@ def run():
                 bear_mask_light
             )
 
-            # Remove blue/cyan water
+            # Remove blue/cyan water — but protect the solid "core"
+            # of any large bear-colored blob first. Wet fur or wet
+            # rock right next to spray/whitewater can reflect cool
+            # blue-gray light and get misclassified as water; without
+            # this protection, water_mask can carve a notch straight
+            # through a real bear's body and fragment it into pieces
+            # too small to pass the contour filters.
             water_lower = np.array([70, 20, 40])
             water_upper = np.array([140, 255, 255])
 
@@ -409,9 +415,22 @@ def run():
                 water_upper
             )
 
+            bear_core = cv2.erode(
+                bear_mask,
+                np.ones((9, 9), np.uint8),
+                iterations=1
+            )
+
+            # Only let water_mask remove pixels outside the
+            # protected core
+            water_mask_safe = cv2.bitwise_and(
+                water_mask,
+                cv2.bitwise_not(bear_core)
+            )
+
             fg_mask = cv2.bitwise_and(
                 bear_mask,
-                cv2.bitwise_not(water_mask)
+                cv2.bitwise_not(water_mask_safe)
             )
 
             # Remove green vegetation before contours
@@ -491,14 +510,16 @@ def run():
 
                 bottom_y = y + h
                 aspect = w / max(h, 1)
+                shoreline_density = area / max(w * h, 1)
 
                 if (
                     bottom_y > roi_h * 0.88
                     and w > roi_w * 0.25
                     and aspect > 2.0
+                    and shoreline_density > 0.45
                 ):
                     if args.debug:
-                        log(f"reject: shoreline-band (aspect={aspect:.2f} w={w} bottom_y={bottom_y})")
+                        log(f"reject: shoreline-band (aspect={aspect:.2f} w={w} bottom_y={bottom_y} density={shoreline_density:.2f})")
                     continue
 
                 # Reject long horizontal water / shoreline bands
@@ -701,6 +722,16 @@ def run():
                 cv2.imshow(
                     "Raw Bear-Color Mask (before exclusions)",
                     bear_mask
+                )
+
+                # Water exclusion mask — if this overlaps the bear's
+                # own silhouette (e.g. wet fur/rock near spray
+                # reflecting blue-gray light), it will carve notches
+                # out of bear_mask and fragment or destroy the bear's
+                # shape before contours are even found.
+                cv2.imshow(
+                    "Water Exclusion Mask",
+                    water_mask
                 )
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
