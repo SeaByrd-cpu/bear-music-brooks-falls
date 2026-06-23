@@ -44,7 +44,7 @@ MIN_BEAR_AREA = 2500
 ROI = (0.0, 0.0, 1.0, 1.0)
 
 WARMUP_FRAMES = 5
-EMIT_INTERVAL = 0.04
+EMIT_INTERVAL = 0.07
 
 MAX_BLOBS = 5
 
@@ -87,9 +87,7 @@ def resolve_url(youtube_url):
     try:
         result = subprocess.run(
             [
-                sys.executable,
-                "-m"
-                "yt_dlp",
+                "yt-dlp",
                 "-f",
                 "best[height<=480]",
                 "-g",
@@ -291,9 +289,6 @@ def run():
             "ffmpeg",
             "-loglevel",
             "error",
-            "-reconnect", "1",
-            "-reconnect_streamed", "1",
-            "-reconnect_delay_max", "5",
             "-i",
             stream_url,
             "-vf",
@@ -402,13 +397,7 @@ def run():
                 bear_mask_light
             )
 
-            # Remove blue/cyan water — but protect the solid "core"
-            # of any large bear-colored blob first. Wet fur or wet
-            # rock right next to spray/whitewater can reflect cool
-            # blue-gray light and get misclassified as water; without
-            # this protection, water_mask can carve a notch straight
-            # through a real bear's body and fragment it into pieces
-            # too small to pass the contour filters.
+            # Remove blue/cyan water
             water_lower = np.array([70, 20, 40])
             water_upper = np.array([140, 255, 255])
 
@@ -418,22 +407,9 @@ def run():
                 water_upper
             )
 
-            bear_core = cv2.erode(
-                bear_mask,
-                np.ones((9, 9), np.uint8),
-                iterations=1
-            )
-
-            # Only let water_mask remove pixels outside the
-            # protected core
-            water_mask_safe = cv2.bitwise_and(
-                water_mask,
-                cv2.bitwise_not(bear_core)
-            )
-
             fg_mask = cv2.bitwise_and(
                 bear_mask,
-                cv2.bitwise_not(water_mask_safe)
+                cv2.bitwise_not(water_mask)
             )
 
             # Remove green vegetation before contours
@@ -472,19 +448,6 @@ def run():
                 iterations=3
             )
 
-            # Break thin water bridges between bears and land
-            fg_mask = cv2.erode(
-                fg_mask,
-                np.ones((5, 5), np.uint8),
-                iterations=1
-            )
-
-            fg_mask = cv2.dilate(
-                fg_mask,
-                np.ones((3, 3), np.uint8),
-                iterations=1
-            )
-
             # Remove image-border junk
             fg_mask[:, 0:20] = 0
             fg_mask[:, -20:] = 0
@@ -505,43 +468,22 @@ def run():
                 area = cv2.contourArea(c)
 
                 if area < MIN_BEAR_AREA:
-                    if args.debug:
-                        log(f"reject: area<{MIN_BEAR_AREA} (area={area:.0f})")
                     continue
 
                 x, y, w, h = cv2.boundingRect(c)
 
                 bottom_y = y + h
                 aspect = w / max(h, 1)
-                shoreline_density = area / max(w * h, 1)
 
                 if (
                     bottom_y > roi_h * 0.88
                     and w > roi_w * 0.25
                     and aspect > 2.0
-                    and shoreline_density > 0.45
                 ):
-                    if args.debug:
-                        log(f"reject: shoreline-band (aspect={aspect:.2f} w={w} bottom_y={bottom_y} density={shoreline_density:.2f})")
                     continue
 
-                # Reject long horizontal water / shoreline bands
-                if (
-                    area > roi_w * roi_h * 0.08
-                    and aspect > 4.0
-                ):
-                    if args.debug:
-                        log(f"reject: horizontal-band (aspect={aspect:.2f} area_frac={area/(roi_w*roi_h):.2f})")
-                    continue
-
-                # Reject truly enormous background regions,
-                # but allow close-up bears
-                if (
-                    area > roi_w * roi_h * 0.65
-                    and aspect > 2.5
-                ):
-                    if args.debug:
-                        log(f"reject: enormous-background (aspect={aspect:.2f} area_frac={area/(roi_w*roi_h):.2f})")
+                # Reject enormous background regions
+                if area > roi_w * roi_h * 0.30 and aspect > 2.5:
                     continue
 
                 touches_left = x <= 2
@@ -573,31 +515,21 @@ def run():
                             or y < roi_h * 0.35
                         )
                 ):
-                    if args.debug:
-                        log(f"reject: vegetation-color (h={mean_h:.0f} s={mean_s:.0f} aspect={aspect:.2f})")
                     continue
 
                 # Allow large close-up bears, reject smaller edge junk
                 if edge_touches >= 2 and area < roi_w * roi_h * 0.12:
-                    if args.debug:
-                        log(f"reject: small-edge-junk (edge_touches={edge_touches} area_frac={area/(roi_w*roi_h):.2f})")
                     continue
 
-                if aspect > 5.5:
-                    if args.debug:
-                        log(f"reject: aspect-too-wide (aspect={aspect:.2f})")
+                if aspect > 4.0:
                     continue
 
                 if aspect < 0.25:
-                    if args.debug:
-                        log(f"reject: aspect-too-tall (aspect={aspect:.2f})")
                     continue
 
                 density = area / max(w * h, 1)
 
-                if density < 0.07:
-                    if args.debug:
-                        log(f"reject: low-density (density={density:.3f} area_frac={area/(roi_w*roi_h):.2f})")
+                if density < 0.12:
                     continue
 
                 M = cv2.moments(c)
@@ -629,15 +561,6 @@ def run():
             )
 
             bears = bears[:MAX_BLOBS]
-
-            if len(bears) == 0: 
-                tracks.clear()
-
-            if args.debug:
-                print(
-                    f"Contours={len(contours)} Accepted={len(bears)}",
-                    flush=True
-                )
 
             tracked_bears = update_tracks(bears)
 
@@ -714,27 +637,6 @@ def run():
                 cv2.imshow(
                     "Foreground Mask",
                     fg_mask
-                )
-
-                # Raw color-based bear mask, before water/green
-                # exclusion — compare against "Foreground Mask" to
-                # see whether the green/water exclusion steps are
-                # carving pieces out of a real bear's silhouette
-                # (this is the likely cause when a mostly-still bear
-                # gets rejected as too-small or shoreline-band).
-                cv2.imshow(
-                    "Raw Bear-Color Mask (before exclusions)",
-                    bear_mask
-                )
-
-                # Water exclusion mask — if this overlaps the bear's
-                # own silhouette (e.g. wet fur/rock near spray
-                # reflecting blue-gray light), it will carve notches
-                # out of bear_mask and fragment or destroy the bear's
-                # shape before contours are even found.
-                cv2.imshow(
-                    "Water Exclusion Mask",
-                    water_mask
                 )
 
                 if cv2.waitKey(1) & 0xFF == ord("q"):
