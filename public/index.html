@@ -1180,12 +1180,10 @@ function flowPulse(freq, velocity, x, bearId) {
 // ── WebSocket ─────────────────────────────────────────
 
 function connectWS() {
-  console.log("Trying WebSocket:", WS_URL);
 
   socket = new WebSocket(WS_URL);
 
   socket.onopen = () => {
-    console.log("WebSocket OPEN");
 
     const dot = document.getElementById("dot-ws");
     const label = document.getElementById("label-ws");
@@ -1194,8 +1192,7 @@ function connectWS() {
     if (label) label.innerText = "Detector live";
   };
 
-  socket.onerror = (event) => {
-    console.log("WebSocket ERROR:", event);
+  socket.onerror = () => {
 
     const dot = document.getElementById("dot-ws");
     const label = document.getElementById("label-ws");
@@ -1204,8 +1201,7 @@ function connectWS() {
     if (label) label.innerText = "Socket error";
   };
 
-  socket.onclose = (event) => {
-    console.log("WebSocket CLOSED:", event.code, event.reason);
+  socket.onclose = () => {
 
     const dot = document.getElementById("dot-ws");
     const label = document.getElementById("label-ws");
@@ -1220,23 +1216,20 @@ function connectWS() {
 
   socket.onmessage = (event) => {
 
-    if (!started) {
-      return;
-    }
-
-    const msg = event.data.toString().trim();
+    if (!started) return;
 
     try {
-      const data = JSON.parse(msg);
+      const data = JSON.parse(
+        event.data.toString().trim()
+      );
 
       if (data.bears) {
-
         lastBearUpdate = performance.now();
-
         onBearData(data.bears);
       }
-    } catch (err) {
-      console.log("bad detector json:", msg, err);
+
+    } catch {
+      // silently ignore malformed packets
     }
   };
 }

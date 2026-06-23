@@ -62,7 +62,17 @@ try:
 
             if r.status_code == 200:
                 bear_count = len(payload.get("bears", []))
-                print(f"✓ sent ({bear_count} bears)", flush=True)
+
+                if not hasattr(stop_cleanly, "sent_count"):
+                    stop_cleanly.sent_count = 0
+
+                stop_cleanly.sent_count += 1
+
+                if stop_cleanly.sent_count % 500 == 0:
+                    print(
+                        f"✓ sent {stop_cleanly.sent_count} updates — latest: {bear_count} bears",
+                        flush=True
+                    )
             else:
                 print("Upload failed:", r.status_code, r.text, flush=True)
 
