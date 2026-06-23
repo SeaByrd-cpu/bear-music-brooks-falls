@@ -806,7 +806,7 @@ function onBearData(bears) {
 
   if (
     suddenMotion &&
-    audioCtx.currentTime - mem.lastBurst > 0.35
+    audioCtx.currentTime - mem.lastBurst > 0.5
   ) {
     mem.lastBurst = audioCtx.currentTime;
 
@@ -816,11 +816,11 @@ function onBearData(bears) {
       bear.x
     );
 
-    // occasional higher sparkle, like a head turn / fish flash
-    if (Math.random() < 0.35) {
+    // rare higher sparkle, like a fish flash — softer than the main burst
+    if (Math.random() < 0.18) {
       shortBurst(
-        freq * 2,
-        0.35,
+        freq * 1.45,
+        0.18,
         bear.x
       );
     }
@@ -1046,29 +1046,40 @@ function shortBurst(freq, velocity, x) {
   const env = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
   const panner = audioCtx.createStereoPanner();
+  const dryGain = audioCtx.createGain();
+  const wetGain = audioCtx.createGain();
 
-  osc.type = "square";
-  osc.frequency.value = freq * (1.5 + Math.random() * 1.5);
+  // Softer, more organic transient: no square wave, no extreme random octave jump.
+  osc.type = "triangle";
+  osc.frequency.value = freq * (0.95 + Math.random() * 0.35);
 
   filter.type = "bandpass";
-  filter.frequency.value = freq * 3.0;
-  filter.Q.value = 2.5;
+  filter.frequency.value = freq * 1.8;
+  filter.Q.value = 0.8;
 
-  panner.pan.value = (x * 2 - 1) * 0.85;
+  panner.pan.value = (x * 2 - 1) * 0.65;
+
+  const burstGain = Math.min(0.08, velocity * 0.055);
 
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(velocity * 0.12, now + 0.006);
-  env.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  env.gain.linearRampToValueAtTime(burstGain, now + 0.012);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+
+  dryGain.gain.value = 0.75;
+  wetGain.gain.value = 0.35;
 
   osc.connect(filter);
   filter.connect(env);
   env.connect(panner);
 
-  // mostly dry, so it reads as a real short note
-  panner.connect(masterGain);
+  // A little dry attack, plus a small reverb tail: present but not arcade-y.
+  panner.connect(dryGain);
+  panner.connect(wetGain);
+  dryGain.connect(masterGain);
+  wetGain.connect(reverb);
 
   osc.start(now);
-  osc.stop(now + 0.22);
+  osc.stop(now + 0.5);
 }
 
 function movementPluck(freq, velocity, x) {
