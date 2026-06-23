@@ -806,24 +806,18 @@ function onBearData(bears) {
 
   if (
     suddenMotion &&
-    audioCtx.currentTime - mem.lastBurst > 0.5
+    audioCtx.currentTime - mem.lastBurst > 0.55
   ) {
     mem.lastBurst = audioCtx.currentTime;
 
-    shortBurst(
-      freq,
-      Math.min(1, 0.35 + bear.speed * 28 + da * 10),
+    // Scale-locked old-school bell: no random pitch jumps,
+    // no dry arcade blip. This stays inside the same note map
+    // as the rest of the bear voices.
+    bearBell(
+      noteIndex + 2,
+      Math.min(1, 0.22 + bear.speed * 10 + da * 4),
       bear.x
     );
-
-    // rare higher sparkle, like a fish flash — softer than the main burst
-    if (Math.random() < 0.18) {
-      shortBurst(
-        freq * 1.45,
-        0.18,
-        bear.x
-      );
-    }
   }
 
   mem.x = bear.x;
@@ -883,7 +877,7 @@ function onBearData(bears) {
   }
 
   if (type === "bell") {
-    targetGain *= 0.22;
+    targetGain *= 0.5;
   }
 
   if (type === "pulse") {
@@ -912,19 +906,17 @@ function onBearData(bears) {
     t + 0.18
   );
 
-  // movement-triggered plucks
+  // movement-triggered bells — old Mac-feel version:
+  // only true active motion gets a bell, so it stays rhythmic
+  // instead of becoming constant data-noise.
   if (
-    bear.behavior === "active" ||
-    bear.behavior === "moving" ||
-    bear.speed > 0.004 ||
-    movementEnergy > 0.012
+    bear.behavior === "active"
+    && bear.speed > 0.015
   ) {
-    pluckNote(
-      freq,
-      Math.min(
-        1,
-        bear.speed * 45 + movementEnergy * 12
-      )
+    bearBell(
+      noteIndex,
+      Math.min(1, bear.speed * 12),
+      bear.x
     );
   }
 
@@ -954,21 +946,22 @@ function onBearData(bears) {
   ) {
     lastAmbientBellTime = audioCtx.currentTime;
 
-    pluckNote(
-      freq * 1.25,
-      0.07
+    bearBell(
+      noteIndex + 1,
+      0.07,
+      bear.x
     );
   }
 
-  // bell shimmer layer — a real accent on movement, not background texture
+  // bell shimmer layer — scale-locked and old-school, not random/dry
   if (
     type === "bell"
     && bear.speed > 0.01
   ) {
-
-    pluckNote(
-      freq * 1.75,
-      0.3
+    bearBell(
+      noteIndex + 3,
+      0.15,
+      bear.x
     );
   }
 
@@ -1004,7 +997,9 @@ function pluckNote(freq, velocity) {
 
   const now = audioCtx.currentTime;
 
-  if (now - lastPluckTime < 0.08) return;
+  // Slower cooldown from the older musical branch. This keeps
+  // plucks from becoming a constant machine-gun data texture.
+  if (now - lastPluckTime < 0.22) return;
 
   lastPluckTime = now;
 
@@ -1012,74 +1007,78 @@ function pluckNote(freq, velocity) {
   const env = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
 
-  osc.type = "triangle";
-  osc.frequency.value = freq * 0.75;
+  osc.type = "sine";
+  osc.frequency.value = freq;
 
-  filter.type = "bandpass";
-  filter.frequency.value = freq * 1.5;
-  filter.Q.value = 0.9;
+  filter.type = "lowpass";
+  filter.frequency.value = 1800;
+  filter.Q.value = 0.4;
 
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(
-  velocity * 0.055,
-  now + 0.05
-  );
-  env.gain.exponentialRampToValueAtTime(
-    0.001,
-    now + 1.4
-  );
+  env.gain.linearRampToValueAtTime(velocity * 0.12, now + 0.01);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 1.8);
 
   osc.connect(filter);
   filter.connect(env);
-  env.connect(reverb);
+  env.connect(masterGain);
 
   osc.start(now);
-  osc.stop(now + 1.6);
+  osc.stop(now + 2.0);
 }
 
-function shortBurst(freq, velocity, x) {
+function bearBell(noteIndex, velocity, x) {
   if (!audioCtx) return;
 
   const now = audioCtx.currentTime;
+
+  const safeIndex = Math.max(
+    0,
+    Math.min(
+      SCALE_HZ.length - 1,
+      Math.round(noteIndex)
+    )
+  );
+
+  const freq = SCALE_HZ[safeIndex] * 2;
 
   const osc = audioCtx.createOscillator();
   const env = audioCtx.createGain();
   const filter = audioCtx.createBiquadFilter();
   const panner = audioCtx.createStereoPanner();
-  const dryGain = audioCtx.createGain();
-  const wetGain = audioCtx.createGain();
 
-  // Softer, more organic transient: no square wave, no extreme random octave jump.
-  osc.type = "triangle";
-  osc.frequency.value = freq * (0.95 + Math.random() * 0.35);
+  // Old-school bell character: sine + lowpass, no random pitch,
+  // no square-wave edge, no sharp bandpass.
+  osc.type = "sine";
+  osc.frequency.value = freq;
 
-  filter.type = "bandpass";
-  filter.frequency.value = freq * 1.8;
-  filter.Q.value = 0.8;
+  filter.type = "lowpass";
+  filter.frequency.value = 2200;
+  filter.Q.value = 0.35;
 
-  panner.pan.value = (x * 2 - 1) * 0.65;
-
-  const burstGain = Math.min(0.08, velocity * 0.055);
+  panner.pan.value = (x * 2 - 1) * 0.55;
 
   env.gain.setValueAtTime(0, now);
-  env.gain.linearRampToValueAtTime(burstGain, now + 0.012);
-  env.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
-
-  dryGain.gain.value = 0.75;
-  wetGain.gain.value = 0.35;
+  env.gain.linearRampToValueAtTime(velocity * 0.11, now + 0.012);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 1.15);
 
   osc.connect(filter);
   filter.connect(env);
   env.connect(panner);
 
-  // A little dry attack, plus a small reverb tail: present but not arcade-y.
+  // Mostly dry, like the older branch, with a small reverb send
+  // so the bell belongs to the same space without smearing.
+  const dryGain = audioCtx.createGain();
+  const wetGain = audioCtx.createGain();
+  dryGain.gain.value = 0.85;
+  wetGain.gain.value = 0.18;
+
   panner.connect(dryGain);
   panner.connect(wetGain);
   dryGain.connect(masterGain);
   wetGain.connect(reverb);
 
   osc.start(now);
-  osc.stop(now + 0.5);
+  osc.stop(now + 1.25);
 }
 
 function movementPluck(freq, velocity, x) {
