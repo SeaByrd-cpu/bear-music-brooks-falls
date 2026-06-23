@@ -269,6 +269,7 @@ const visualBlobs = [];
 const bearVoices = {};
 
 const bearNoteMemory = {};
+const bearMotionMemory = {};
 
 const VOICE_TYPES = [
   "low",
@@ -481,6 +482,7 @@ function removeBearVoice(id) {
 
   delete bearVoices[id];
   delete bearNoteMemory[id];
+  delete bearMotionMemory[id];
   delete lastFlowPulseTimes[id];
 }
 
@@ -669,9 +671,9 @@ function onBearData(bears) {
 
   const mainBear = bears[0];
 
-  smoothMain.x = smoothMain.x * 0.88 + mainBear.x * 0.12;
-  smoothMain.y = smoothMain.y * 0.88 + mainBear.y * 0.12;
-  smoothMain.area = smoothMain.area * 0.88 + mainBear.area * 0.12;
+  smoothMain.x = smoothMain.x * 0.72 + mainBear.x * 0.28;
+  smoothMain.y = smoothMain.y * 0.72 + mainBear.y * 0.28;
+  smoothMain.area = smoothMain.area * 0.78 + mainBear.area * 0.22;
 
   const x = smoothMain.x;
   const y = smoothMain.y;
@@ -708,16 +710,16 @@ function onBearData(bears) {
     droneGain.gain.linearRampToValueAtTime(0.055 + massCount * 0.02 + sceneDensity * 0.025, t + 1.0);
     padGain.gain.linearRampToValueAtTime(0.025 + sceneDensity * 0.02, t + 1.0);
   } else {
-    pad.frequency.linearRampToValueAtTime(freq, t + 0.25);
+    pad.frequency.linearRampToValueAtTime(freq, t + 0.12);
 
     padFilter.frequency.linearRampToValueAtTime(
       filterFreq + sceneOpenness * 900,
-      t + 0.2
+      t + 0.12
     );
 
     padGain.gain.linearRampToValueAtTime(
       volume + bearCount * 0.02 + sceneDensity * 0.03,
-      t + 0.2
+      t + 0.12
     );
 
     const droneWander =
@@ -735,7 +737,7 @@ function onBearData(bears) {
 
     drone.frequency.linearRampToValueAtTime(
       droneBase + droneWander,
-      t + 1.0
+      t + 0.45
     );
 
     droneDetune.frequency.cancelScheduledValues(t);
@@ -743,17 +745,17 @@ function onBearData(bears) {
 
     droneDetune.frequency.linearRampToValueAtTime(
       droneBase + 0.7 - droneWander * 0.35,
-      t + 1.4
+      t + 0.6
     );
 
     droneFilter.frequency.linearRampToValueAtTime(
       260 + sceneOpenness * 1100,
-      t + 1.0
+      t + 0.45
     );
 
     droneGain.gain.linearRampToValueAtTime(
       0.028 + area * 0.018,
-      t + 0.9
+      t + 0.45
     );
   }
 
@@ -780,11 +782,60 @@ function onBearData(bears) {
 
   const type = voice.type;
 
+  if (!bearMotionMemory[bear.id]) {
+    bearMotionMemory[bear.id] = {
+      x: bear.x,
+      y: bear.y,
+      area: bear.area,
+      speed: bear.speed || 0,
+      lastBurst: 0
+    };
+  }
+
+  const mem = bearMotionMemory[bear.id];
+
+  const dx = bear.x - mem.x;
+  const dy = bear.y - mem.y;
+  const da = Math.abs((bear.area || 0) - mem.area);
+  const ds = Math.abs((bear.speed || 0) - mem.speed);
+
+  const suddenMotion =
+    Math.sqrt(dx * dx + dy * dy) > 0.012 ||
+    da > 0.018 ||
+    ds > 0.006;
+
+  if (
+    suddenMotion &&
+    audioCtx.currentTime - mem.lastBurst > 0.35
+  ) {
+    mem.lastBurst = audioCtx.currentTime;
+
+    shortBurst(
+      freq,
+      Math.min(1, 0.35 + bear.speed * 28 + da * 10),
+      bear.x
+    );
+
+    // occasional higher sparkle, like a head turn / fish flash
+    if (Math.random() < 0.35) {
+      shortBurst(
+        freq * 2,
+        0.35,
+        bear.x
+      );
+    }
+  }
+
+  mem.x = bear.x;
+  mem.y = bear.y;
+  mem.area = bear.area;
+  mem.speed = bear.speed || 0;
+
   const pan = (bear.x * 2 - 1) * 0.75;
 
   voice.panner.pan.linearRampToValueAtTime(
     pan,
-    t + 0.4
+    t + 0.18
   );
 
   // different behaviors affect pitch region
@@ -817,12 +868,12 @@ function onBearData(bears) {
 
   voice.osc.frequency.linearRampToValueAtTime(
     freq,
-    t + 0.3
+    t + 0.12
   );
 
   voice.filter.frequency.linearRampToValueAtTime(
     300 + ((1 - bear.y) * 2600),
-    t + 0.3
+    t + 0.12
   );
 
   let targetGain = 0.01 + bear.area * 0.04;
@@ -858,7 +909,7 @@ function onBearData(bears) {
 
   voice.gain.gain.linearRampToValueAtTime(
     Math.min(gainCeiling, targetGain),
-    t + 0.5
+    t + 0.18
   );
 
   // movement-triggered plucks
@@ -984,6 +1035,40 @@ function pluckNote(freq, velocity) {
 
   osc.start(now);
   osc.stop(now + 1.6);
+}
+
+function shortBurst(freq, velocity, x) {
+  if (!audioCtx) return;
+
+  const now = audioCtx.currentTime;
+
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  const filter = audioCtx.createBiquadFilter();
+  const panner = audioCtx.createStereoPanner();
+
+  osc.type = "square";
+  osc.frequency.value = freq * (1.5 + Math.random() * 1.5);
+
+  filter.type = "bandpass";
+  filter.frequency.value = freq * 3.0;
+  filter.Q.value = 2.5;
+
+  panner.pan.value = (x * 2 - 1) * 0.85;
+
+  env.gain.setValueAtTime(0, now);
+  env.gain.linearRampToValueAtTime(velocity * 0.12, now + 0.006);
+  env.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+
+  osc.connect(filter);
+  filter.connect(env);
+  env.connect(panner);
+
+  // mostly dry, so it reads as a real short note
+  panner.connect(masterGain);
+
+  osc.start(now);
+  osc.stop(now + 0.22);
 }
 
 function movementPluck(freq, velocity, x) {
