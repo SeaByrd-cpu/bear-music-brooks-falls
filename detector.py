@@ -36,7 +36,7 @@ import json
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-DEFAULT_URL = "https://www.youtube.com/watch?v=ZrjFHM27BI8"
+DEFAULT_URL = "https://www.youtube.com/watch?v=4tzyqO8lpq4"
 
 MORPH_KERNEL = 5
 MIN_BEAR_AREA = 2500
